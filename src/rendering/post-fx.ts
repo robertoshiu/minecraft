@@ -155,7 +155,14 @@ export function initPostFX(scene: Scene, camera: Camera): PostFXController {
 
     // Explicitly disabled per design spec.
     p.chromaticAberrationEnabled = false;
-    p.imageProcessingEnabled = false;
+    // Enable image processing with ACES tone mapping so the HDR pipeline
+    // correctly maps linear HDR values back to displayable [0,1] range.
+    // Without this, raw HDR buffer values write to screen and lit surfaces
+    // clip/wash out with the sun intensity values used in the scene.
+    p.imageProcessingEnabled = true;
+    p.imageProcessing.toneMappingEnabled = true;
+    p.imageProcessing.toneMappingType = 1; // ImageProcessingConfiguration.TONEMAPPING_ACES
+    p.imageProcessing.exposure = 1.0;
     p.fxaaEnabled = false;
     p.sharpenEnabled = false;
     p.depthOfFieldEnabled = false;
@@ -170,11 +177,14 @@ export function initPostFX(scene: Scene, camera: Camera): PostFXController {
   try {
     const s = new SSAO2RenderingPipeline("postfx-ssao", scene, 0.5, [camera]);
 
-    // Design spec: intensity 0.4.
-    s.totalStrength = DEFAULT_SSAO_INTENSITY;
-    // Keep default radius and samples; they are acceptable for a voxel game.
-    s.radius = 1.0;
-    s.samples = 8;
+    // Reduced from design-spec 0.4 — in a voxel world every perpendicular
+    // surface neighbour triggers SSAO, so the original strength spread broad
+    // darkening across the whole scene rather than just contact shadows.
+    s.totalStrength = 0.15;
+    // Smaller radius (0.5 vs 1.0) keeps darkening tight to actual contact
+    // edges; more samples (16 vs 8) reduces the resulting noise.
+    s.radius = 0.5;
+    s.samples = 16;
 
     ssao = s;
   } catch (err) {

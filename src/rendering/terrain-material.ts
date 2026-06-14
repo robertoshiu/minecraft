@@ -97,6 +97,21 @@ class AtlasMaterialPlugin extends MaterialPluginBase {
   }
 
   /**
+   * Force Babylon to include UV1 attribute in the compiled vertex shader even
+   * though no native diffuseTexture is assigned to the StandardMaterial.
+   * Without this, `defines._needUVs` stays `false`, `UV1` is excluded from
+   * the shader, and `uvUpdated` is always `vec2(0, 0)` — causing every
+   * fragment to sample the same atlas corner texel (flat colours, no texture).
+   */
+  override prepareDefinesBeforeAttributes(
+    defines: MaterialDefines,
+    _scene: Scene,
+    _mesh: AbstractMesh,
+  ): void {
+    defines._needUVs = true;
+  }
+
+  /**
    * Inject GLSL into both the vertex and fragment shaders. The vertex shader
    * receives the per-vertex `tileIndex` attribute and forwards it to the
    * fragment as `vTileIndex`. The fragment shader reads the mesh UV (which

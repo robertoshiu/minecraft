@@ -30,6 +30,7 @@ function coopCoepPlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: "/minecraft/",
   plugins: [coopCoepPlugin()],
 
   build: {

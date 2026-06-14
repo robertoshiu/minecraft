@@ -1,0 +1,305 @@
+/**
+ * mc-1.20.ts — SINGLE SOURCE OF TRUTH for game constants (Minecraft 1.20 reference).
+ *
+ * Pure data + types only. No logic, no imports from Babylon or anywhere else.
+ * Every magic number in the game must originate here.
+ */
+
+// ---------------------------------------------------------------------------
+// Blocks
+// ---------------------------------------------------------------------------
+
+export const Blocks = {
+  AIR: 0,
+  STONE: 1,
+  DIRT: 2,
+  GRASS: 3,
+  SAND: 4,
+  WATER: 5,
+  OAK_LOG: 6,
+  OAK_LEAVES: 7,
+  OAK_PLANKS: 8,
+  COBBLESTONE: 9,
+  GLASS: 10,
+  COAL_ORE: 11,
+  IRON_ORE: 12,
+  GOLD_ORE: 13,
+  REDSTONE_ORE: 14,
+  DIAMOND_ORE: 15,
+  LAPIS_ORE: 16,
+  BEDROCK: 17,
+  SNOW: 18,
+  GRAVEL: 19,
+  CRAFTING_TABLE: 20,
+  FURNACE: 21,
+  TORCH: 22,
+  GLOWSTONE: 23,
+  LAVA: 24,
+  BIRCH_LOG: 25,
+  BIRCH_LEAVES: 26,
+  BIRCH_PLANKS: 27,
+  BED: 28,
+} as const;
+
+/** A numeric block identifier (one of the values in {@link Blocks}). */
+export type BlockId = (typeof Blocks)[keyof typeof Blocks];
+
+// ---------------------------------------------------------------------------
+// Physics (values in blocks/tick or blocks/second as noted)
+// ---------------------------------------------------------------------------
+
+export const PHYSICS = {
+  /** Initial upward velocity on jump (blocks/tick). */
+  JUMP_VEL: 0.42,
+  /** Downward acceleration per tick (blocks/tick^2). */
+  GRAVITY: 0.08,
+  /** Per-tick vertical velocity multiplier (air drag). */
+  DRAG: 0.98,
+  /** Maximum (most-negative) fall velocity (blocks/tick). */
+  TERMINAL_VEL: -3.92,
+  /** Walking speed (blocks/second). */
+  WALK_SPEED: 4.317,
+  /** Sprinting speed (blocks/second). */
+  SPRINT_SPEED: 5.612,
+  /** Sneaking speed (blocks/second). */
+  CROUCH_SPEED: 1.295,
+  /** Minimum ticks between jumps. */
+  JUMP_COOLDOWN_TICKS: 10,
+} as const;
+
+export const FALL = {
+  /** Blocks of fall that incur no damage. */
+  SAFE_BLOCKS: 3,
+  /** Half-hearts of damage per block fallen beyond the safe threshold. */
+  DAMAGE_PER_BLOCK: 1,
+} as const;
+
+export const TICKS_PER_SECOND = 20 as const;
+
+// ---------------------------------------------------------------------------
+// Time / day-night cycle (in game ticks)
+// ---------------------------------------------------------------------------
+
+export const TIME = {
+  TICKS_PER_DAY: 24000,
+  DAY_START: 0,
+  SUNSET_START: 12000,
+  NIGHT_START: 13000,
+  SUNRISE_START: 23000,
+  /** Wall-clock seconds the full day cycle takes (1200s = 20 min). */
+  REAL_SECONDS_PER_DAY: 1200,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Tools
+// ---------------------------------------------------------------------------
+
+export type ToolTier = "wood" | "stone" | "iron" | "diamond" | "gold" | "none";
+
+export const TOOL_TIER_MULTIPLIER: Record<ToolTier, number> = {
+  none: 1,
+  wood: 2,
+  stone: 4,
+  iron: 6,
+  diamond: 8,
+  gold: 12,
+};
+
+/** Durability (uses) per tool tier. `none` (hand) is not a tool and is omitted. */
+export const TOOL_DURABILITY: Record<Exclude<ToolTier, "none">, number> = {
+  wood: 59,
+  stone: 131,
+  iron: 250,
+  diamond: 1561,
+  gold: 32,
+};
+
+// ---------------------------------------------------------------------------
+// Ore generation
+// ---------------------------------------------------------------------------
+
+export interface OreEntry {
+  readonly block: BlockId;
+  readonly minY: number;
+  readonly maxY: number;
+  readonly bestY: number;
+  readonly veinSize: number;
+  readonly veinsPerChunk: number;
+  readonly toolTier: ToolTier;
+}
+
+export const ORE_TABLE: readonly OreEntry[] = [
+  {
+    block: Blocks.COAL_ORE,
+    minY: 0,
+    maxY: 128,
+    bestY: 64,
+    veinSize: 17,
+    veinsPerChunk: 20,
+    toolTier: "wood",
+  },
+  {
+    block: Blocks.IRON_ORE,
+    minY: 0,
+    maxY: 64,
+    bestY: 32,
+    veinSize: 9,
+    veinsPerChunk: 10,
+    toolTier: "stone",
+  },
+  {
+    block: Blocks.GOLD_ORE,
+    minY: 0,
+    maxY: 32,
+    bestY: 16,
+    veinSize: 9,
+    veinsPerChunk: 4,
+    toolTier: "iron",
+  },
+  {
+    block: Blocks.REDSTONE_ORE,
+    minY: 0,
+    maxY: 16,
+    bestY: 8,
+    veinSize: 8,
+    veinsPerChunk: 8,
+    toolTier: "iron",
+  },
+  {
+    block: Blocks.DIAMOND_ORE,
+    minY: 0,
+    maxY: 16,
+    bestY: 4,
+    veinSize: 4,
+    veinsPerChunk: 7,
+    toolTier: "iron",
+  },
+  {
+    block: Blocks.LAPIS_ORE,
+    minY: 0,
+    maxY: 32,
+    bestY: 16,
+    veinSize: 7,
+    veinsPerChunk: 2,
+    toolTier: "stone",
+  },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Block hardness (seconds to break by hand at multiplier 1). Infinity = unbreakable.
+// ---------------------------------------------------------------------------
+
+export const BLOCK_HARDNESS: Partial<Record<BlockId, number>> = {
+  [Blocks.DIRT]: 0.5,
+  [Blocks.GRASS]: 0.5,
+  [Blocks.SAND]: 0.5,
+  [Blocks.STONE]: 1.5,
+  [Blocks.COBBLESTONE]: 1.5,
+  [Blocks.OAK_LOG]: 2,
+  [Blocks.OAK_PLANKS]: 2,
+  [Blocks.COAL_ORE]: 3,
+  [Blocks.IRON_ORE]: 3,
+  [Blocks.GOLD_ORE]: 3,
+  [Blocks.REDSTONE_ORE]: 3,
+  [Blocks.DIAMOND_ORE]: 3,
+  [Blocks.LAPIS_ORE]: 3,
+  [Blocks.GLASS]: 0.3,
+  [Blocks.BEDROCK]: Infinity,
+  [Blocks.OAK_LEAVES]: 0.2,
+};
+
+// ---------------------------------------------------------------------------
+// Hunger / saturation / exhaustion
+// ---------------------------------------------------------------------------
+
+export const HUNGER = {
+  MAX_FOOD: 20,
+  MAX_SATURATION: 20,
+  MAX_EXHAUSTION: 4,
+  /** Food level at/above which natural regen begins. */
+  REGEN_FOOD_THRESHOLD: 18,
+  /** Food level below which sprinting is disabled. */
+  SPRINT_DISABLE_FOOD: 6,
+  /** Ticks between regen ticks while well-fed. */
+  REGEN_INTERVAL_TICKS: 80,
+  /** Exhaustion added per heart regenerated. */
+  REGEN_EXHAUSTION_COST: 6,
+  /** Ticks between starvation damage ticks at 0 food. */
+  STARVE_INTERVAL_TICKS: 80,
+} as const;
+
+export const EXHAUSTION = {
+  SPRINT_PER_M: 0.1,
+  JUMP: 0.05,
+  SPRINT_JUMP: 0.2,
+  BREAK_BLOCK: 0.005,
+  ATTACK: 0.1,
+  TAKE_DAMAGE: 0.1,
+} as const;
+
+export interface FoodValue {
+  readonly hunger: number;
+  readonly saturation: number;
+}
+
+export const FOOD_VALUES: Record<string, FoodValue> = {
+  steak: { hunger: 8, saturation: 12.8 },
+  bread: { hunger: 5, saturation: 6 },
+  apple: { hunger: 4, saturation: 2.4 },
+  cooked_porkchop: { hunger: 8, saturation: 12.8 },
+  cooked_chicken: { hunger: 6, saturation: 7.2 },
+};
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
+export const HEALTH = {
+  MAX: 20,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Smelting / fuel (fuel values in items-smelted; 1 coal = 8 items).
+// ---------------------------------------------------------------------------
+
+export const SMELT = {
+  TICKS_PER_ITEM: 200,
+} as const;
+
+export const FUEL_VALUES: Record<string, number> = {
+  coal: 8,
+  coal_block: 80,
+  lava_bucket: 100,
+  oak_planks: 1.5,
+  stick: 0.5,
+  oak_log: 1.5,
+};
+
+// ---------------------------------------------------------------------------
+// Mob spawning
+// ---------------------------------------------------------------------------
+
+export const MOB_CAP = {
+  HOSTILE: 10,
+  PASSIVE: 10,
+} as const;
+
+export const LIGHT = {
+  /** Max light level at which hostile mobs may spawn. */
+  HOSTILE_MAX: 7,
+  /** Min light level required for passive mob spawns. */
+  PASSIVE_MIN: 9,
+  /** Maximum sky light level. */
+  SKY_MAX: 15,
+} as const;
+
+// ---------------------------------------------------------------------------
+// World / chunk dimensions
+// ---------------------------------------------------------------------------
+
+export const CHUNK = {
+  /** Horizontal chunk extent in blocks (x and z). */
+  SIZE: 16,
+  /** Vertical world extent in blocks. */
+  HEIGHT: 256,
+} as const;

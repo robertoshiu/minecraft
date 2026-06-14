@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minecraft Clone</title>
+    <link rel="stylesheet" href="/src/styles/hud.css" />
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+
+    <div id="hud">
+      <div id="crosshair"></div>
+
+      <div id="hotbar">
+        <div class="slot"></div>
+        <div class="slot"></div>
+        <div class="slot"></div>
+        <div class="slot"></div>
+        <div class="slot"></div>
+        <div class="slot"></div>
+        <div class="slot"></div>
+        <div class="slot"></div>
+        <div class="slot"></div>
+      </div>
+
+      <div id="health-bar">
+        <div class="heart"></div>
+        <div class="heart"></div>
+        <div class="heart"></div>
+        <div class="heart"></div>
+        <div class="heart"></div>
+        <div class="heart"></div>
+        <div class="heart"></div>
+        <div class="heart"></div>
+        <div class="heart"></div>
+        <div class="heart"></div>
+      </div>
+
+      <div id="hunger-bar">
+        <div class="shank"></div>
+        <div class="shank"></div>
+        <div class="shank"></div>
+        <div class="shank"></div>
+        <div class="shank"></div>
+        <div class="shank"></div>
+        <div class="shank"></div>
+        <div class="shank"></div>
+        <div class="shank"></div>
+        <div class="shank"></div>
+      </div>
+
+      <div id="day-counter">Day 1</div>
+      <div id="save-indicator"></div>
+      <div id="fps">0 FPS</div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,283 @@
+@import './fonts.css';
+
+:root {
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --bg-panel: #1a1d24;
+  --bg-glass: rgba(18, 21, 28, 0.82);
+  --bg-overlay: rgba(0, 0, 0, 0.55);
+  --bg-slot: #252830;
+  --bg-slot-hover: #2f333d;
+  --accent: #d4a843;
+  --accent-hover: #e6bc5a;
+  --text-primary: #e8e6e1;
+  --text-secondary: #9a978f;
+  --text-muted: #5c5a54;
+  --hp-full: #c43838;
+  --hp-empty: #3a2020;
+  --hunger-full: #b07830;
+  --hunger-empty: #2e2418;
+  --day-indicator: #f0c860;
+
+  --slot-border: #3a3d45;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: var(--font-ui);
+}
+
+#renderCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  margin: 0;
+  touch-action: none;
+  outline: none;
+}
+
+/* ---------------------------------------------------------------- HUD root */
+
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ---------------------------------------------------------------- crosshair */
+
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  opacity: 0.8;
+}
+
+#crosshair::before,
+#crosshair::after {
+  content: "";
+  position: absolute;
+  background: var(--text-primary);
+}
+
+/* horizontal bar */
+#crosshair::before {
+  top: 50%;
+  left: 0;
+  width: 24px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+/* vertical bar */
+#crosshair::after {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 24px;
+  transform: translateX(-50%);
+}
+
+/* ------------------------------------------------------------------ hotbar */
+
+#hotbar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+}
+
+.slot {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--slot-border);
+  background: var(--bg-glass);
+  border-radius: 8px;
+}
+
+/* First slot is the selected slot. */
+.slot:first-child {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 8px var(--accent),
+    0 0 2px var(--accent) inset;
+}
+
+/* ---------------------------------------------------- health & hunger bars */
+
+#health-bar,
+#hunger-bar {
+  position: absolute;
+  bottom: 64px;
+  display: flex;
+  gap: 2px;
+}
+
+#health-bar {
+  left: 16px;
+}
+
+#hunger-bar {
+  right: 16px;
+  flex-direction: row-reverse;
+}
+
+.heart,
+.shank {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.heart {
+  background: var(--hp-full);
+}
+
+.heart.empty {
+  background: var(--hp-empty);
+}
+
+/* Half heart: full color on the left half, empty on the right. */
+.heart.half {
+  background: linear-gradient(
+    to right,
+    var(--hp-full) 0 50%,
+    var(--hp-empty) 50% 100%
+  );
+}
+
+.shank {
+  background: var(--hunger-full);
+}
+
+.shank.empty {
+  background: var(--hunger-empty);
+}
+
+/* Half shank: full color on the right half (hunger bar is row-reverse). */
+.shank.half {
+  background: linear-gradient(
+    to left,
+    var(--hunger-full) 0 50%,
+    var(--hunger-empty) 50% 100%
+  );
+}
+
+/* ------------------------------------------------------------- day counter */
+
+#day-counter {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  padding: 6px 14px;
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------- save indicator */
+
+#save-indicator {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  background: var(--bg-glass);
+  color: var(--accent);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* --------------------------------------------------------------------- fps */
+
+#fps {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------ hint toasts */
+
+.hint-container {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.hint-toast {
+  padding: 10px 20px;
+  background: var(--bg-glass, rgba(18, 21, 28, 0.82));
+  color: var(--text-primary, #e8e6e1);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.hint-toast.visible {
+  opacity: 1;
+}
+
+.hint-toast.fade-out {
+  opacity: 0;
+  transition: opacity 500ms ease;
+}
+
+/* -------------------------------------------------- inventory drag cursor */
+
+.cursor-item {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10000;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-panel, #1a1d24);
+  border: 1px solid var(--accent, #d4a843);
+  color: var(--text-primary, #e8e6e1);
+  font-size: 11px;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  transform: translate(12px, 12px);
+  display: none;
+}

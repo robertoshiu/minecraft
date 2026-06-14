@@ -1,0 +1,120 @@
+import { describe, it, expect } from "vitest";
+import {
+  DEFAULT_PREFS,
+  clampPrefs,
+  serializePrefs,
+  parsePrefs,
+  loadPrefs,
+  savePrefs,
+  type Prefs,
+} from "./preferences";
+import { MemoryStore } from "../save/store";
+
+describe("clampPrefs", () => {
+  it("returns defaults when given the defaults", () => {
+    const result = clampPrefs({ ...DEFAULT_PREFS });
+    expect(result).toEqual(DEFAULT_PREFS);
+  });
+
+  it("clamps renderDistance to [2..6]", () => {
+    expect(clampPrefs({ ...DEFAULT_PREFS, renderDistance: 1 }).renderDistance).toBe(2);
+    expect(clampPrefs({ ...DEFAULT_PREFS, renderDistance: 7 }).renderDistance).toBe(6);
+    expect(clampPrefs({ ...DEFAULT_PREFS, renderDistance: 4 }).renderDistance).toBe(4);
+  });
+
+  it("rounds renderDistance to integer", () => {
+    expect(clampPrefs({ ...DEFAULT_PREFS, renderDistance: 2.7 }).renderDistance).toBe(3);
+  });
+
+  it("clamps fov to [60..110]", () => {
+    expect(clampPrefs({ ...DEFAULT_PREFS, fov: 30 }).fov).toBe(60);
+    expect(clampPrefs({ ...DEFAULT_PREFS, fov: 200 }).fov).toBe(110);
+    expect(clampPrefs({ ...DEFAULT_PREFS, fov: 90 }).fov).toBe(90);
+  });
+
+  it("clamps mouseSensitivity to [0.2..3]", () => {
+    expect(clampPrefs({ ...DEFAULT_PREFS, mouseSensitivity: 0 }).mouseSensitivity).toBe(0.2);
+    expect(clampPrefs({ ...DEFAULT_PREFS, mouseSensitivity: 5 }).mouseSensitivity).toBe(3);
+    expect(clampPrefs({ ...DEFAULT_PREFS, mouseSensitivity: 1.5 }).mouseSensitivity).toBe(1.5);
+  });
+
+  it("clamps volumes to [0..1]", () => {
+    expect(clampPrefs({ ...DEFAULT_PREFS, masterVolume: -0.1 }).masterVolume).toBe(0);
+    expect(clampPrefs({ ...DEFAULT_PREFS, masterVolume: 2 }).masterVolume).toBe(1);
+    expect(clampPrefs({ ...DEFAULT_PREFS, sfxVolume: -0.5 }).sfxVolume).toBe(0);
+    expect(clampPrefs({ ...DEFAULT_PREFS, ambientVolume: 1.5 }).ambientVolume).toBe(1);
+  });
+
+  it("replaces NaN fields with defaults", () => {
+    const result = clampPrefs({ ...DEFAULT_PREFS, fov: NaN, masterVolume: NaN });
+    expect(result.fov).toBe(DEFAULT_PREFS.fov);
+    expect(result.masterVolume).toBe(DEFAULT_PREFS.masterVolume);
+  });
+});
+
+describe("serializePrefs / parsePrefs round-trip", () => {
+  it("round-trips the defaults", () => {
+    const bytes = serializePrefs(DEFAULT_PREFS);
+    const back = parsePrefs(bytes);
+    expect(back).toEqual(DEFAULT_PREFS);
+  });
+
+  it("round-trips custom values", () => {
+    const p: Prefs = {
+      ...DEFAULT_PREFS,
+      renderDistance: 5,
+      fov: 90,
+      mouseSensitivity: 1.5,
+      masterVolume: 0.8,
+      sfxVolume: 0.6,
+      ambientVolume: 0.4,
+    };
+    const bytes = serializePrefs(p);
+    expect(parsePrefs(bytes)).toEqual(p);
+  });
+
+  it("produces non-zero bytes", () => {
+    const bytes = serializePrefs(DEFAULT_PREFS);
+    expect(bytes.byteLength).toBeGreaterThan(0);
+  });
+});
+
+describe("parsePrefs tolerance", () => {
+  it("returns DEFAULT_PREFS for empty bytes", () => {
+    expect(parsePrefs(new Uint8Array(0))).toEqual(DEFAULT_PREFS);
+  });
+
+  it("returns DEFAULT_PREFS for garbage bytes", () => {
+    const garbage = new Uint8Array([0xff, 0x00, 0xab, 0xcd]);
+    expect(parsePrefs(garbage)).toEqual(DEFAULT_PREFS);
+  });
+
+  it("returns DEFAULT_PREFS for valid JSON that is not an object", () => {
+    const bytes = new TextEncoder().encode("42");
+    expect(parsePrefs(bytes)).toEqual(DEFAULT_PREFS);
+  });
+
+  it("fills missing fields with defaults", () => {
+    const partial = new TextEncoder().encode(JSON.stringify({ fov: 100 }));
+    const result = parsePrefs(partial);
+    expect(result.fov).toBe(100);
+    expect(result.renderDistance).toBe(DEFAULT_PREFS.renderDistance);
+    expect(result.masterVolume).toBe(DEFAULT_PREFS.masterVolume);
+  });
+});
+
+describe("loadPrefs / savePrefs (MemoryStore)", () => {
+  it("returns DEFAULT_PREFS when nothing is stored", async () => {
+    const store = new MemoryStore();
+    const result = await loadPrefs(store);
+    expect(result).toEqual(DEFAULT_PREFS);
+  });
+
+  it("round-trips via save then load", async () => {
+    const store = new MemoryStore();
+    const p: Prefs = { ...DEFAULT_PREFS, fov: 100, masterVolume: 0.5 };
+    await savePrefs(store, p);
+    const loaded = await loadPrefs(store);
+    expect(loaded).toEqual(p);
+  });
+});

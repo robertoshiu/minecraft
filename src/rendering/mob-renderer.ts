@@ -31,6 +31,13 @@ import { TICKS_PER_SECOND } from "../rules/mc-1.20";
 import { legSwing, easeToRest, DEFAULT_GAIT } from "./mob-animation";
 
 // ---------------------------------------------------------------------------
+// Animation constants
+// ---------------------------------------------------------------------------
+
+/** Max animation advance per sync, in ticks (~0.2s) — prevents a snap after a tab-switch/pause. */
+const MAX_VISUAL_DT_TICKS = 4;
+
+// ---------------------------------------------------------------------------
 // Color constants
 // ---------------------------------------------------------------------------
 
@@ -364,12 +371,13 @@ export class MobRenderer {
    *  - Dispose any record whose mob id is gone (removing from shadow sink first).
    */
   sync(mobs: Mob[], nowMs?: number, currentTick?: number): void {
-    void currentTick;
+    void currentTick; // currentTick: reserved for Tasks 7/8 (hit-flash / death-grace)
 
     let dtTicks = 0;
     if (nowMs !== undefined) {
       const prev = this.lastNowMs ?? nowMs;
-      dtTicks = ((nowMs - prev) / 1000) * TICKS_PER_SECOND;
+      const raw = ((nowMs - prev) / 1000) * TICKS_PER_SECOND;
+      dtTicks = Math.max(0, Math.min(raw, MAX_VISUAL_DT_TICKS));
       this.lastNowMs = nowMs;
     }
 

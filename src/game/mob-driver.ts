@@ -21,8 +21,10 @@ import type { Player } from "../player/controller";
 import { damage } from "../survival/stats";
 import type { Clock } from "../time/clock";
 import { isNight } from "../time/clock";
-import { makeStack } from "../inventory/stack";
+import { makeStack, damageTool } from "../inventory/stack";
 import type { ItemDef, ToolTier } from "../rules/items";
+import { armorReduction } from "../combat/armor";
+import { ARMOR_SLOTS } from "../inventory/equipment";
 
 import { MobManager } from "../mobs/manager";
 import { Mob, type Vec3 } from "../mobs/entity";
@@ -276,7 +278,8 @@ export class MobDriver {
     const eye = player.eyePosition();
 
     const hooks: CombatHooks = {
-      damagePlayer: (amount: number) => damage(player.survival, amount),
+      damagePlayer: (amount: number) =>
+        applyPlayerDamage(player, amount, clock.totalTicks),
       playerEyePos: () => player.eyePosition(),
     };
 
@@ -354,7 +357,8 @@ export class MobDriver {
       CREEPER_POWER,
       this.manager.all(),
       {
-        damagePlayer: (n: number) => damage(player.survival, n),
+        damagePlayer: (n: number) =>
+          applyPlayerDamage(player, n, currentTick),
         playerPos: () => player.feet,
       },
       currentTick,
@@ -500,6 +504,32 @@ function raySlab(
   if (tmax < 0) return null;
   // Entry distance: 0 if the origin is already inside the box.
   return tmin < 0 ? 0 : tmin;
+}
+
+/**
+ * THE single player-damage chokepoint. Applies armor reduction, decrements
+ * armor durability on a real hit, then routes the clamped integer amount to
+ * the survival damage() function. (i-frames are added in Task 6.)
+ *
+ * Starvation does NOT pass through here (it writes s.health directly) — by
+ * design, armor never mitigates starvation.
+ */
+export function applyPlayerDamage(
+  player: Player,
+  rawAmount: number,
+  _currentTick: number,
+): void {
+  const defense = player.equipment.totalDefense();
+  const effective = armorReduction(rawAmount, defense);
+  if (effective <= 0) return; // fully absorbed — no health loss, no durability wear
+  // Decrement durability on each worn piece that took the hit.
+  for (const slot of ARMOR_SLOTS) {
+    const piece = player.equipment.get(slot);
+    if (piece !== null) {
+      player.equipment.set(slot, damageTool(piece));
+    }
+  }
+  damage(player.survival, effective);
 }
 
 /**

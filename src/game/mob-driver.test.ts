@@ -14,8 +14,10 @@ import {
   attackMob,
   attackDamageFor,
   PLAYER_ATTACK_DAMAGE,
+  applyPlayerDamage,
 } from "./mob-driver";
 import { getItemDef, Items } from "../rules/items";
+import { makeStack, makeArmorStack } from "../inventory/stack";
 
 /** A renderer stub that records every blockChanged call. */
 class RecordingRenderer implements RemeshNotifier {
@@ -281,5 +283,43 @@ describe("MobDriver.aiTick — creeper explosion path", () => {
     expect(driver.manager.get(creeper.id)).toBeUndefined();
     // …and the renderer was told about destroyed blocks.
     expect(renderer.changed.length).toBeGreaterThan(0);
+  });
+});
+
+describe("applyPlayerDamage", () => {
+  it("no armor → full damage reaches survival", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    applyPlayerDamage(player, 6, 100);
+    expect(player.survival.health).toBe(14);
+  });
+  it("armor reduces damage (iron chestplate, 6 defense)", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    player.equipment.equip("chestplate", makeStack(Items.IRON_CHESTPLATE, 1, 1));
+    // 6 def → 24% off → 6 × 0.76 = 4.56 → 5
+    applyPlayerDamage(player, 6, 100);
+    expect(player.survival.health).toBe(15);
+  });
+  it("decrements armor durability on a real hit", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.equipment.equip("chestplate", makeArmorStack(Items.IRON_CHESTPLATE));
+    const startDur = player.equipment.get("chestplate")!.durability!;
+    applyPlayerDamage(player, 6, 100);
+    expect(player.equipment.get("chestplate")!.durability).toBe(startDur - 1);
+  });
+  it("fully-absorbed hit costs no health and no durability", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    // Full diamond set = 3 + 8 + 6 + 3 = 20 defense → 80% cap.
+    player.equipment.equip("helmet", makeArmorStack(Items.DIAMOND_HELMET));
+    player.equipment.equip("chestplate", makeArmorStack(Items.DIAMOND_CHESTPLATE));
+    player.equipment.equip("leggings", makeArmorStack(Items.DIAMOND_LEGGINGS));
+    player.equipment.equip("boots", makeArmorStack(Items.DIAMOND_BOOTS));
+    const durBefore = player.equipment.get("chestplate")!.durability!;
+    // 2 dmg × (1 − 0.8) = 0.4 → round → 0 → fully absorbed, early-return.
+    applyPlayerDamage(player, 2, 100);
+    expect(player.survival.health).toBe(20);
+    expect(player.equipment.get("chestplate")!.durability).toBe(durBefore);
   });
 });

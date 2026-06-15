@@ -213,8 +213,11 @@ varying float vFaceShade;
   float _edge = min(min(_g.x, 1.0 - _g.x), min(_g.y, 1.0 - _g.y));
   // Narrow band (0.08) so AO only appears at close contact, not across the face.
   float _contactAO = smoothstep(0.0, 0.08, _edge);
-  // mix(0.90, 1.0) -> at most ~10% darken at the extreme edge.
-  baseColor.rgb *= mix(0.90, 1.0, _contactAO);
+  // Contact-AO gives cube edge-depth, but on flat TOP faces (vFaceShade==1.0)
+  // it tiles into a visible grid — so skip it there, keep it on side/bottom faces.
+  float _aoFactor = mix(0.90, 1.0, _contactAO);
+  float _isTop = step(0.999, vFaceShade); // 1.0 on top faces only
+  baseColor.rgb *= mix(_aoFactor, 1.0, _isTop); // top faces -> no darkening
 }
 `,
       };

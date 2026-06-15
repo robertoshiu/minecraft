@@ -18,6 +18,10 @@ import {
   type BlockId,
   FOOD_VALUES,
   TOOL_DURABILITY,
+  type ArmorTier,
+  type ArmorSlot,
+  ARMOR_DEFENSE,
+  ARMOR_DURABILITY,
 } from "./mc-1.20";
 
 /** A numeric item identifier. Block items reuse the block id; non-block items start at 256. */
@@ -36,7 +40,7 @@ export interface ItemDef {
   id: ItemId;
   name: string;
   maxStack: number;
-  kind: "block" | "tool" | "food" | "material";
+  kind: "block" | "tool" | "food" | "material" | "armor";
   /** Block placed when this item is used (block items only). */
   placesBlock?: BlockId;
   /** Tool material tier (tools only). */
@@ -45,6 +49,10 @@ export interface ItemDef {
   toolType?: ToolType;
   /** Hunger/saturation restored when eaten (food only). */
   food?: { hunger: number; saturation: number };
+  /** Armor material tier (armor only). */
+  armorTier?: ArmorTier;
+  /** Armor slot this piece occupies (armor only). */
+  armorSlot?: ArmorSlot;
 }
 
 /**
@@ -101,6 +109,20 @@ export const Items = {
   GOLDEN_SHOVEL: NON_BLOCK_BASE + 44,
   GOLDEN_SWORD: NON_BLOCK_BASE + 45,
   GOLDEN_HOE: NON_BLOCK_BASE + 46,
+
+  // Armor — tier × slot. (Separate ids from the LEATHER material at +19.)
+  LEATHER_HELMET: NON_BLOCK_BASE + 47,
+  LEATHER_CHESTPLATE: NON_BLOCK_BASE + 48,
+  LEATHER_LEGGINGS: NON_BLOCK_BASE + 49,
+  LEATHER_BOOTS: NON_BLOCK_BASE + 50,
+  IRON_HELMET: NON_BLOCK_BASE + 51,
+  IRON_CHESTPLATE: NON_BLOCK_BASE + 52,
+  IRON_LEGGINGS: NON_BLOCK_BASE + 53,
+  IRON_BOOTS: NON_BLOCK_BASE + 54,
+  DIAMOND_HELMET: NON_BLOCK_BASE + 55,
+  DIAMOND_CHESTPLATE: NON_BLOCK_BASE + 56,
+  DIAMOND_LEGGINGS: NON_BLOCK_BASE + 57,
+  DIAMOND_BOOTS: NON_BLOCK_BASE + 58,
 } as const;
 
 /** Default stack size for ordinary (non-tool) items. */
@@ -133,6 +155,15 @@ function tool(
   toolType: ToolType,
 ): ItemDef {
   return { id, name, maxStack: 1, kind: "tool", toolTier, toolType };
+}
+
+function armor(
+  id: ItemId,
+  name: string,
+  armorTier: ArmorTier,
+  armorSlot: ArmorSlot,
+): ItemDef {
+  return { id, name, maxStack: 1, kind: "armor", armorTier, armorSlot };
 }
 
 function blockItem(id: BlockId, name: string): ItemDef {
@@ -246,6 +277,19 @@ const NON_BLOCK_DEFS: readonly ItemDef[] = [
   tool(Items.GOLDEN_SHOVEL, "Golden Shovel", "gold", "shovel"),
   tool(Items.GOLDEN_SWORD, "Golden Sword", "gold", "sword"),
   tool(Items.GOLDEN_HOE, "Golden Hoe", "gold", "hoe"),
+
+  armor(Items.LEATHER_HELMET, "Leather Helmet", "leather", "helmet"),
+  armor(Items.LEATHER_CHESTPLATE, "Leather Chestplate", "leather", "chestplate"),
+  armor(Items.LEATHER_LEGGINGS, "Leather Leggings", "leather", "leggings"),
+  armor(Items.LEATHER_BOOTS, "Leather Boots", "leather", "boots"),
+  armor(Items.IRON_HELMET, "Iron Helmet", "iron", "helmet"),
+  armor(Items.IRON_CHESTPLATE, "Iron Chestplate", "iron", "chestplate"),
+  armor(Items.IRON_LEGGINGS, "Iron Leggings", "iron", "leggings"),
+  armor(Items.IRON_BOOTS, "Iron Boots", "iron", "boots"),
+  armor(Items.DIAMOND_HELMET, "Diamond Helmet", "diamond", "helmet"),
+  armor(Items.DIAMOND_CHESTPLATE, "Diamond Chestplate", "diamond", "chestplate"),
+  armor(Items.DIAMOND_LEGGINGS, "Diamond Leggings", "diamond", "leggings"),
+  armor(Items.DIAMOND_BOOTS, "Diamond Boots", "diamond", "boots"),
 ];
 
 /** Block items whose max stack differs from the default 64. */
@@ -320,4 +364,27 @@ export function toolDurabilityOf(id: ItemId): number | null {
   const def = getItemDef(id);
   if (def.kind !== "tool" || def.toolTier === undefined) return null;
   return TOOL_DURABILITY[def.toolTier];
+}
+
+/** True iff this item is a wearable armor piece. */
+export function isArmor(id: ItemId): boolean {
+  return getItemDef(id).kind === "armor";
+}
+
+/** Defense points for an armor item, or 0 for non-armor. */
+export function armorDefenseOf(id: ItemId): number {
+  const def = getItemDef(id);
+  if (def.kind !== "armor" || def.armorTier === undefined || def.armorSlot === undefined) {
+    return 0;
+  }
+  return ARMOR_DEFENSE[def.armorTier][def.armorSlot];
+}
+
+/** Durability (hits) for an armor item, or null for non-armor. */
+export function armorDurabilityOf(id: ItemId): number | null {
+  const def = getItemDef(id);
+  if (def.kind !== "armor" || def.armorTier === undefined || def.armorSlot === undefined) {
+    return null;
+  }
+  return ARMOR_DURABILITY[def.armorTier][def.armorSlot];
 }

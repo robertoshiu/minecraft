@@ -11,6 +11,9 @@ import {
   isTool,
   maxStackOf,
   toolDurabilityOf,
+  isArmor,
+  armorDefenseOf,
+  armorDurabilityOf,
   type ItemId,
 } from "./items";
 
@@ -140,5 +143,31 @@ describe("accessors", () => {
     expect(maxStackOf(Items.COAL)).toBe(64);
     expect(maxStackOf(Blocks.DIRT)).toBe(64);
     expect(maxStackOf(Items.IRON_PICKAXE)).toBe(1);
+  });
+});
+
+describe("ITEM_REGISTRY — armor", () => {
+  it("registers all 12 armor pieces with armorTier + armorSlot + defense", () => {
+    const armorIds = [
+      Items.LEATHER_HELMET, Items.LEATHER_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.LEATHER_BOOTS,
+      Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.IRON_LEGGINGS, Items.IRON_BOOTS,
+      Items.DIAMOND_HELMET, Items.DIAMOND_CHESTPLATE, Items.DIAMOND_LEGGINGS, Items.DIAMOND_BOOTS,
+    ];
+    for (const id of armorIds) {
+      const def = ITEM_REGISTRY[id];
+      expect(def, `missing armor def for ${id}`).toBeDefined();
+      expect(def?.kind).toBe("armor");
+      expect(def?.armorTier).toBeDefined();
+      expect(def?.armorSlot).toBeDefined();
+      expect(def?.maxStack).toBe(1);
+      expect(armorDefenseOf(id)).toBeGreaterThan(0);
+      expect(armorDurabilityOf(id)).toBeGreaterThan(0);
+    }
+  });
+  it("isArmor is true only for armor, false for tools/blocks/food", () => {
+    expect(isArmor(Items.IRON_CHESTPLATE)).toBe(true);
+    expect(isArmor(Items.IRON_PICKAXE)).toBe(false);
+    expect(isArmor(Items.BREAD)).toBe(false);
+    expect(isArmor(Blocks.STONE)).toBe(false);
   });
 });

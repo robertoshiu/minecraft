@@ -115,6 +115,36 @@ export const TOOL_DURABILITY: Record<Exclude<ToolTier, "none">, number> = {
 };
 
 // ---------------------------------------------------------------------------
+// Armor (MC 1.20 canonical defense points + per-slot durability)
+// ---------------------------------------------------------------------------
+
+/** Armor material tiers. NOTE: distinct from ToolTier (no stone armor). */
+export type ArmorTier = "leather" | "iron" | "diamond" | "gold";
+/** The four armor slots. */
+export type ArmorSlot = "helmet" | "chestplate" | "leggings" | "boots";
+
+/** Defense points (armor points) per tier × slot. Each point ≈ 4% reduction. */
+export const ARMOR_DEFENSE: Record<ArmorTier, Record<ArmorSlot, number>> = {
+  leather: { helmet: 1, chestplate: 3, leggings: 2, boots: 1 },
+  iron: { helmet: 2, chestplate: 6, leggings: 5, boots: 2 },
+  diamond: { helmet: 3, chestplate: 8, leggings: 6, boots: 3 },
+  gold: { helmet: 2, chestplate: 5, leggings: 3, boots: 1 },
+};
+
+/** Durability (hits absorbed) per tier × slot. */
+export const ARMOR_DURABILITY: Record<ArmorTier, Record<ArmorSlot, number>> = {
+  leather: { helmet: 55, chestplate: 80, leggings: 75, boots: 65 },
+  iron: { helmet: 165, chestplate: 240, leggings: 225, boots: 195 },
+  diamond: { helmet: 363, chestplate: 528, leggings: 495, boots: 429 },
+  gold: { helmet: 77, chestplate: 112, leggings: 105, boots: 91 },
+};
+
+/** Damage reduction contributed per defense point (4%). */
+export const ARMOR_REDUCTION_PER_POINT = 0.04;
+/** Hard cap on total armor reduction (80%). */
+export const ARMOR_MAX_REDUCTION = 0.8;
+
+// ---------------------------------------------------------------------------
 // Ore generation
 // ---------------------------------------------------------------------------
 

@@ -38,8 +38,9 @@ import { resolveUse } from "./interaction/use-item";
 import { getItemDef } from "./rules/items";
 import { updateHotbarHud } from "./ui/hotbar-hud";
 import { updateSurvivalHud } from "./ui/survival-hud";
-import { makeStack, makeToolStack, isTool, damageTool } from "./inventory/stack";
+import { isTool, damageTool } from "./inventory/stack";
 import { Inventory } from "./inventory/inventory";
+import { makeDefaultInventory } from "./inventory/default-inventory";
 import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME } from "./rules/mc-1.20";
 import { makeClock, advance, tickOfDay, dayNumber } from "./time/clock";
 import { canSleep, sleepToDawn } from "./sleep/bed";
@@ -302,15 +303,11 @@ function findSpawn(): { x: number; y: number; z: number } {
 let spawnPoint = findSpawn();
 const player = new Player(spawnPoint);
 
-// Starter inventory: blocks to place immediately + a couple of tools.
-player.inventory.set(0, makeStack(Blocks.OAK_PLANKS, 64));
-player.inventory.set(1, makeStack(Blocks.STONE, 64));
-player.inventory.set(2, makeStack(Blocks.GLASS, 64));
-player.inventory.set(3, makeStack(Blocks.COBBLESTONE, 64));
-player.inventory.set(4, makeToolStack(Blocks.OAK_LOG, "wood"));
-player.inventory.set(5, makeToolStack(Blocks.STONE, "stone"));
-player.inventory.set(6, makeStack(Blocks.CRAFTING_TABLE, 4));
-player.inventory.set(7, makeStack(Blocks.BED, 1));
+// Starter inventory: real tools + blocks + food, from the single factory.
+const starter = makeDefaultInventory();
+for (let i = 0; i < Inventory.SLOTS; i++) {
+  player.inventory.set(i, starter.get(i));
+}
 player.hotbar.select(0);
 
 // --- Persistence: store + boot restore ------------------------------------

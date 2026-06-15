@@ -213,19 +213,36 @@ describe("tintFor", () => {
     expect(tintFor(7)).toEqual(tintFor(7));
   });
 
-  it("each channel is in [0.85, 1.0]", () => {
-    const [r, g, b] = tintFor(7);
-    expect(r).toBeGreaterThanOrEqual(0.85);
-    expect(r).toBeLessThanOrEqual(1.0);
-    expect(g).toBeGreaterThanOrEqual(0.85);
-    expect(g).toBeLessThanOrEqual(1.0);
-    expect(b).toBeGreaterThanOrEqual(0.85);
-    expect(b).toBeLessThanOrEqual(1.0);
+  it("each channel is in [0.85, 1.0] for several ids", () => {
+    for (const id of [1, 2, 3, 7, 42, 100]) {
+      const [r, g, b] = tintFor(id);
+      expect(r).toBeGreaterThanOrEqual(0.85);
+      expect(r).toBeLessThanOrEqual(1.0);
+      expect(g).toBeGreaterThanOrEqual(0.85);
+      expect(g).toBeLessThanOrEqual(1.0);
+      expect(b).toBeGreaterThanOrEqual(0.85);
+      expect(b).toBeLessThanOrEqual(1.0);
+    }
   });
 
   it("returns a tuple of exactly 3 numbers", () => {
     const result = tintFor(42);
     expect(result).toHaveLength(3);
     result.forEach((v) => expect(typeof v).toBe("number"));
+  });
+
+  it("different ids produce different tints — id 1 differs from id 2 in at least one channel", () => {
+    const [r1, g1, b1] = tintFor(1);
+    const [r2, g2, b2] = tintFor(2);
+    const differs = r1 !== r2 || g1 !== g2 || b1 !== b2;
+    expect(differs).toBe(true);
+  });
+
+  it("tints for ids 1..12 are not all identical — distinct set size > 1", () => {
+    const seen = new Set<string>();
+    for (let i = 1; i <= 12; i++) {
+      seen.add(JSON.stringify(tintFor(i)));
+    }
+    expect(seen.size).toBeGreaterThan(1);
   });
 });

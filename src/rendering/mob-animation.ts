@@ -66,13 +66,22 @@ export function deathScale(progress: number): number {
   return 1 - progress;
 }
 
-/** Deterministic per-individual tint multiplier (RGB each ~0.85..1.0). No Math.random. */
+/**
+ * Deterministic per-individual tint multiplier. Each channel ~0.85..1.0, and
+ * different mob ids produce different tints (no Math.random). Uses Math.imul
+ * 32-bit mixing and extracts the HIGH byte (which varies reliably), with a
+ * per-channel salt so the three channels differ.
+ */
 export function tintFor(mobId: number): [number, number, number] {
-  let h = (mobId * 2654435761) >>> 0;
-  const chan = (): number => {
-    h = (h ^ (h >>> 15)) >>> 0;
-    h = (h * 2246822519) >>> 0;
-    return 0.85 + ((h & 0xff) / 255) * 0.15;
+  const mix = (n: number): number => {
+    let x = (n ^ 0x9e3779b9) >>> 0;
+    x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
+    x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
+    return (x ^ (x >>> 16)) >>> 0;
   };
-  return [chan(), chan(), chan()];
+  const chan = (salt: number): number => {
+    const h = mix((Math.imul(mobId, 0x9e3779b1) + salt) >>> 0);
+    return 0.85 + ((h >>> 24) / 255) * 0.15; // high byte → [0.85, 1.0]
+  };
+  return [chan(1), chan(2), chan(3)];
 }

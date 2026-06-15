@@ -41,9 +41,10 @@ interface Keyframe {
 /**
  * Sky-color keyframes around the day circle.
  *
- *   0      morning sky-blue (== the wrap target, so 24000 lands here exactly)
- *   6000   noon: bright sky blue
- *   12000  late afternoon, still fairly bright
+ *   0      morning: warm peach-blue (== the wrap target, so 24000 lands here exactly)
+ *   6000   mid-morning: warmer sky, b still dominant
+ *   10000  golden hour (spawn): warm amber, r>b
+ *   12000  late afternoon: soft warm-blue
  *   12500  sunset: warm orange
  *   13000  dusk, rapidly darkening
  *   18000  midnight: dark navy
@@ -54,14 +55,15 @@ interface Keyframe {
  * which is what makes tod=23999 continuous with tod=0.
  */
 const SKY_KEYFRAMES: readonly Keyframe[] = [
-  { at: 0, color: [0.45, 0.65, 0.95] },
-  { at: 6000, color: [0.45, 0.65, 0.95] },
-  { at: 12000, color: [0.5, 0.62, 0.85] },
-  { at: 12500, color: [0.95, 0.55, 0.25] },
-  { at: 13000, color: [0.35, 0.22, 0.28] },
-  { at: 18000, color: [0.02, 0.03, 0.09] },
-  { at: 22800, color: [0.06, 0.05, 0.16] },
-  { at: 23200, color: [0.95, 0.6, 0.55] },
+  { at: 0,     color: [0.60, 0.68, 0.88] },  // morning: warm peach-blue
+  { at: 6000,  color: [0.55, 0.70, 0.90] },  // mid-morning: warmer sky, b still dominant
+  { at: 10000, color: [0.82, 0.62, 0.38] },  // golden hour (spawn): warm amber, r>b
+  { at: 12000, color: [0.58, 0.66, 0.82] },  // late afternoon: soft warm-blue
+  { at: 12500, color: [0.95, 0.55, 0.25] },  // sunset (unchanged)
+  { at: 13000, color: [0.35, 0.22, 0.28] },  // dusk (unchanged)
+  { at: 18000, color: [0.02, 0.03, 0.09] },  // midnight (unchanged)
+  { at: 22800, color: [0.06, 0.05, 0.16] },  // pre-dawn (unchanged)
+  { at: 23200, color: [0.95, 0.6,  0.55] },  // sunrise (unchanged)
 ];
 
 /**

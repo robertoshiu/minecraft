@@ -35,7 +35,7 @@ import type { ShadowCasterSink } from "./world-renderer";
 import { TICKS_PER_SECOND } from "../rules/mc-1.20";
 import {
   legSwing, easeToRest, idleBob, tailSway, headPitch,
-  DEFAULT_GAIT, type GaitParams, tintFor,
+  DEFAULT_GAIT, type GaitParams, tintFor, recentlyDamaged,
 } from "./mob-animation";
 
 // ---------------------------------------------------------------------------
@@ -263,6 +263,8 @@ interface MobRecord {
   root: TransformNode;
   /** All part meshes, in order, for shadow sink management. */
   partMeshes: Mesh[];
+  /** Each part mesh's normal (non-flash) material, parallel to partMeshes. */
+  baseMaterials: StandardMaterial[];
   /** Leg pivot nodes, in part order; length equals the number of leg parts. */
   legPivots: TransformNode[];
   /** Head pivot (look + bob driver), or null if the species has no head pivot. */
@@ -293,6 +295,8 @@ export class MobRenderer {
   private shadowSink: ShadowCasterSink | null = null;
   /** Last wall-clock timestamp passed to sync(); undefined until first live call. */
   private lastNowMs: number | undefined = undefined;
+  /** Single shared red-flash material, created on first flash. Never per-instance. */
+  private flashMat: StandardMaterial | null = null;
 
   constructor(scene: Scene, shadowSink?: ShadowCasterSink) {
     this.scene = scene;
@@ -349,6 +353,17 @@ export class MobRenderer {
     return mat;
   }
 
+  private flashMaterial(): StandardMaterial {
+    if (this.flashMat === null) {
+      const m = new StandardMaterial("mob-flash", this.scene);
+      m.diffuseColor = new Color3(1, 0, 0);
+      m.emissiveColor = new Color3(0.6, 0, 0);
+      m.specularColor = new Color3(0, 0, 0);
+      this.flashMat = m;
+    }
+    return this.flashMat;
+  }
+
   // ---- Model building -------------------------------------------------------
 
   /** Paint a deterministic per-individual RGBA vertex-color buffer on a box (multiplies the texture). */
@@ -374,12 +389,14 @@ export class MobRenderer {
    */
   private buildModel(mob: Mob, root: TransformNode): {
     partMeshes: Mesh[];
+    baseMaterials: StandardMaterial[];
     legPivots: TransformNode[];
     headPivot: TransformNode | null;
     swayPivots: TransformNode[];
   } {
     const modelDef = MODELS[mob.type];
     const partMeshes: Mesh[] = [];
+    const baseMaterials: StandardMaterial[] = [];
     const legPivots: TransformNode[] = [];
     let headPivot: TransformNode | null = null;
     const swayPivots: TransformNode[] = [];
@@ -456,6 +473,7 @@ export class MobRenderer {
 
         legPivots.push(pivot);
         partMeshes.push(box);
+        baseMaterials.push(mat);
       } else if (pivotRole === "head") {
         // Create a pivot at the part's local position; box is a child offset so
         // rotation occurs about the pivot point (base of the head).
@@ -479,6 +497,7 @@ export class MobRenderer {
         // First head pivot wins (models have a single head).
         if (headPivot === null) headPivot = pivot;
         partMeshes.push(box);
+        baseMaterials.push(mat);
       } else if (pivotRole === "tail" || pivotRole === "ear") {
         // Create a pivot at the part's local position; box hangs from it.
         const pivot = new TransformNode(`mob_${mob.id}_${pivotRole}pivot_${i}`, this.scene);
@@ -500,6 +519,7 @@ export class MobRenderer {
 
         swayPivots.push(pivot);
         partMeshes.push(box);
+        baseMaterials.push(mat);
       } else {
         // Non-pivot part: position is the CENTER of the box in root space.
         const box = CreateBox(
@@ -515,10 +535,11 @@ export class MobRenderer {
         this.shadowSink?.addShadowCaster(box);
 
         partMeshes.push(box);
+        baseMaterials.push(mat);
       }
     });
 
-    return { partMeshes, legPivots, headPivot, swayPivots };
+    return { partMeshes, baseMaterials, legPivots, headPivot, swayPivots };
   }
 
   // ---- sync -----------------------------------------------------------------
@@ -531,8 +552,6 @@ export class MobRenderer {
    *  - Dispose any record whose mob id is gone (removing from shadow sink first).
    */
   sync(mobs: Mob[], nowMs?: number, currentTick?: number): void {
-    void currentTick; // currentTick: reserved for Tasks 7/8 (hit-flash / death-grace)
-
     let dtTicks = 0;
     if (nowMs !== undefined) {
       const prev = this.lastNowMs ?? nowMs;
@@ -551,8 +570,8 @@ export class MobRenderer {
       if (record === undefined) {
         // Create the root TransformNode for this mob.
         const root = new TransformNode(`mob_${mob.id}`, this.scene);
-        const { partMeshes, legPivots, headPivot, swayPivots } = this.buildModel(mob, root);
-        record = { root, partMeshes, legPivots, headPivot, swayPivots, visualClock: 0 };
+        const { partMeshes, baseMaterials, legPivots, headPivot, swayPivots } = this.buildModel(mob, root);
+        record = { root, partMeshes, baseMaterials, legPivots, headPivot, swayPivots, visualClock: 0 };
         this.records.set(mob.id, record);
       }
 
@@ -595,6 +614,21 @@ export class MobRenderer {
         }
         // Idle bob: nudge root y above the feet position already set this frame.
         record.root.position.y = mob.feet.y + idleBob(t);
+      }
+
+      // Hit flash: swap to the SHARED flash material while recently damaged;
+      // revert to each mesh's base material otherwise. currentTick is undefined
+      // on the test path → never flashes → material sharing assertion intact.
+      const flashing =
+        currentTick !== undefined &&
+        recentlyDamaged(mob.lastDamageTick, currentTick);
+      if (flashing) {
+        const fm = this.flashMaterial();
+        for (const mesh of record.partMeshes) mesh.material = fm;
+      } else {
+        record.partMeshes.forEach((mesh, idx) => {
+          mesh.material = record.baseMaterials[idx]!;
+        });
       }
     }
 
@@ -643,5 +677,8 @@ export class MobRenderer {
 
     this.mobAtlasTex?.dispose();
     this.mobAtlasTex = null;
+
+    this.flashMat?.dispose();
+    this.flashMat = null;
   }
 }

@@ -28,7 +28,10 @@ import type { Mob } from "../mobs/entity";
 import type { MobType } from "../rules/mob-stats";
 import type { ShadowCasterSink } from "./world-renderer";
 import { TICKS_PER_SECOND } from "../rules/mc-1.20";
-import { legSwing, easeToRest, DEFAULT_GAIT, type GaitParams } from "./mob-animation";
+import {
+  legSwing, easeToRest, idleBob, tailSway, headPitch,
+  DEFAULT_GAIT, type GaitParams,
+} from "./mob-animation";
 
 // ---------------------------------------------------------------------------
 // Animation constants
@@ -131,13 +134,15 @@ const MODELS: Record<MobType, ModelDef> = {
     parts: [
       // body
       { w: 0.80, h: 0.60, d: 0.50, x: 0, y: 0.80, z: 0 },
-      // head (front)
-      { w: 0.50, h: 0.45, d: 0.45, x: 0, y: 1.05, z: 0.30 },
+      // head (front) — driven by head look channel
+      { w: 0.50, h: 0.45, d: 0.45, x: 0, y: 1.05, z: 0.30, pivotRole: "head", role: "head" },
       // horns (two small dark bumps on top of head) — optional decorative parts
       { w: 0.08, h: 0.15, d: 0.08, x: -0.16, y: 1.38, z: 0.28, color: "#3b2a1a" },
       { w: 0.08, h: 0.15, d: 0.08, x:  0.16, y: 1.38, z: 0.28, color: "#3b2a1a" },
       // snout
       { w: 0.28, h: 0.18, d: 0.12, x: 0, y: 0.98, z: 0.54, color: "#c09070" },
+      // tail — driven by tail sway channel
+      { w: 0.12, h: 0.18, d: 0.08, x: 0, y: 0.85, z: -0.28, pivotRole: "tail", role: "tail" },
       // 4 legs — hip at y=0.50, leg length 0.50
       ...quadLegs(0.50, 0.50, 0.20, 0.20, 0.28, 0.18),
     ],
@@ -268,6 +273,10 @@ interface MobRecord {
   partMeshes: Mesh[];
   /** Leg pivot nodes, in part order; length equals the number of leg parts. */
   legPivots: TransformNode[];
+  /** Head pivot (look + bob driver), or null if the species has no head pivot. */
+  headPivot: TransformNode | null;
+  /** Tail/ear pivots driven by the sway channel. */
+  swayPivots: TransformNode[];
   /** Continuous wall-clock animation time in ticks (advanced by real deltaTime when nowMs is provided). */
   visualClock: number;
 }
@@ -324,11 +333,18 @@ export class MobRenderer {
    * Build all part meshes + pivot nodes for `mob`, parent them under `root`,
    * and return the record (without storing it).
    */
-  private buildModel(mob: Mob, root: TransformNode): { partMeshes: Mesh[]; legPivots: TransformNode[] } {
+  private buildModel(mob: Mob, root: TransformNode): {
+    partMeshes: Mesh[];
+    legPivots: TransformNode[];
+    headPivot: TransformNode | null;
+    swayPivots: TransformNode[];
+  } {
     const modelDef = MODELS[mob.type];
     const baseColor = MOB_COLORS[mob.type];
     const partMeshes: Mesh[] = [];
     const legPivots: TransformNode[] = [];
+    let headPivot: TransformNode | null = null;
+    const swayPivots: TransformNode[] = [];
 
     modelDef.parts.forEach((part, i) => {
       const color = part.color ?? baseColor;
@@ -358,8 +374,50 @@ export class MobRenderer {
 
         legPivots.push(pivot);
         partMeshes.push(box);
+      } else if (pivotRole === "head") {
+        // Create a pivot at the part's local position; box is a child offset so
+        // rotation occurs about the pivot point (base of the head).
+        const pivot = new TransformNode(`mob_${mob.id}_headpivot_${i}`, this.scene);
+        pivot.parent = root;
+        pivot.position.set(part.x, part.y, part.z);
+
+        const box = CreateBox(
+          `mob_${mob.id}_part_${i}`,
+          { width: part.w, height: part.h, depth: part.d },
+          this.scene,
+        );
+        box.parent = pivot;
+        // Box center is offset so rotation pivots about the bottom of the head.
+        box.position.set(0, part.h / 2, 0);
+        box.material = mat;
+        box.receiveShadows = true;
+        this.shadowSink?.addShadowCaster(box);
+
+        // First head pivot wins (or last; spec says "last one wins / first head" — we use first).
+        if (headPivot === null) headPivot = pivot;
+        partMeshes.push(box);
+      } else if (pivotRole === "tail" || pivotRole === "ear") {
+        // Create a pivot at the part's local position; box hangs from it.
+        const pivot = new TransformNode(`mob_${mob.id}_${pivotRole}pivot_${i}`, this.scene);
+        pivot.parent = root;
+        pivot.position.set(part.x, part.y, part.z);
+
+        const box = CreateBox(
+          `mob_${mob.id}_part_${i}`,
+          { width: part.w, height: part.h, depth: part.d },
+          this.scene,
+        );
+        box.parent = pivot;
+        // Box center offset below the pivot so rotation swings about the attachment point.
+        box.position.set(0, -part.h / 2, 0);
+        box.material = mat;
+        box.receiveShadows = true;
+        this.shadowSink?.addShadowCaster(box);
+
+        swayPivots.push(pivot);
+        partMeshes.push(box);
       } else {
-        // Non-leg part: position is the CENTER of the box in root space.
+        // Non-pivot part: position is the CENTER of the box in root space.
         const box = CreateBox(
           `mob_${mob.id}_part_${i}`,
           { width: part.w, height: part.h, depth: part.d },
@@ -375,7 +433,7 @@ export class MobRenderer {
       }
     });
 
-    return { partMeshes, legPivots };
+    return { partMeshes, legPivots, headPivot, swayPivots };
   }
 
   // ---- sync -----------------------------------------------------------------
@@ -408,8 +466,8 @@ export class MobRenderer {
       if (record === undefined) {
         // Create the root TransformNode for this mob.
         const root = new TransformNode(`mob_${mob.id}`, this.scene);
-        const { partMeshes, legPivots } = this.buildModel(mob, root);
-        record = { root, partMeshes, legPivots, visualClock: 0 };
+        const { partMeshes, legPivots, headPivot, swayPivots } = this.buildModel(mob, root);
+        record = { root, partMeshes, legPivots, headPivot, swayPivots, visualClock: 0 };
         this.records.set(mob.id, record);
       }
 
@@ -423,17 +481,30 @@ export class MobRenderer {
       const t = nowMs !== undefined ? record.visualClock : mob.age;
 
       const speed = Math.hypot(mob.velocity.x, mob.velocity.z);
+      const gait = MODELS[mob.type].gait ?? DEFAULT_GAIT;
       if (speed > 0.02) {
         record.legPivots.forEach((pivot, idx) => {
           // Alternate phase: even-indexed legs swing forward, odd swing backward.
           const phase = idx % 2 === 0 ? 0 : Math.PI;
-          pivot.rotation.x = legSwing(t, phase, DEFAULT_GAIT);
+          pivot.rotation.x = legSwing(t, phase, gait);
         });
       } else {
         // Ease legs back to rest position.
         for (const pivot of record.legPivots) {
           pivot.rotation.x = easeToRest(pivot.rotation.x);
         }
+      }
+
+      // Expressive channels (live path only; test path stays byte-identical).
+      if (nowMs !== undefined) {
+        if (record.headPivot !== null) {
+          record.headPivot.rotation.x = headPitch(0.1) * 0.5; // gentle ambient look
+        }
+        for (const pivot of record.swayPivots) {
+          pivot.rotation.z = tailSway(t);
+        }
+        // Idle bob: nudge root y above the feet position already set this frame.
+        record.root.position.y = mob.feet.y + idleBob(t);
       }
     }
 

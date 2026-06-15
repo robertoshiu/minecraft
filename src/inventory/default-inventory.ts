@@ -6,7 +6,7 @@
  */
 
 import { Inventory } from "./inventory";
-import { makeStack, makeToolStack } from "./stack";
+import { makeStack, makeToolStack, makeArmorStack } from "./stack";
 import { Blocks } from "../rules/mc-1.20";
 import { Items } from "../rules/items";
 
@@ -24,5 +24,10 @@ export function makeDefaultInventory(): Inventory {
   inv.set(7, makeStack(Blocks.BED, 1));
   // Food (previously absent entirely).
   inv.set(8, makeStack(Items.BREAD, 8));
+  // Starter armor (Phase 4) — lets the player actually use the equipment system.
+  inv.set(9, makeArmorStack(Items.IRON_HELMET));
+  inv.set(10, makeArmorStack(Items.IRON_CHESTPLATE));
+  inv.set(11, makeArmorStack(Items.IRON_LEGGINGS));
+  inv.set(12, makeArmorStack(Items.IRON_BOOTS));
   return inv;
 }

@@ -15,6 +15,7 @@ import type { ItemDef } from "../rules/items";
 /** The action a right-click resolves to. */
 export type UseAction =
   | { kind: "eat" }
+  | { kind: "equip" }
   | { kind: "place" }
   | { kind: "use-other" }
   | { kind: "none" };
@@ -36,6 +37,9 @@ export interface UseContext {
 export function resolveUse(def: ItemDef, ctx: UseContext): UseAction {
   if (def.kind === "food") {
     return ctx.hungry ? { kind: "eat" } : { kind: "none" };
+  }
+  if (def.kind === "armor") {
+    return { kind: "equip" };
   }
   if (def.placesBlock !== undefined) {
     return { kind: "place" };

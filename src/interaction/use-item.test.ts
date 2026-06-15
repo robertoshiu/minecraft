@@ -21,4 +21,9 @@ describe("resolveUse", () => {
   it("material → use-other", () => {
     expect(resolveUse(getItemDef(Items.STICK), { hungry: false })).toEqual({ kind: "use-other" });
   });
+  it("armor → equip (regardless of hunger)", () => {
+    const def = getItemDef(Items.IRON_CHESTPLATE);
+    expect(resolveUse(def, { hungry: true })).toEqual({ kind: "equip" });
+    expect(resolveUse(def, { hungry: false })).toEqual({ kind: "equip" });
+  });
 });

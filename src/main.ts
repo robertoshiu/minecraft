@@ -77,6 +77,7 @@ import { ParticleManager } from "./effects/particles";
 import { GameEffects } from "./effects/game-effects";
 import { initPostFX, type PostFXController } from "./rendering/post-fx";
 import { HintManager } from "./ui/hints";
+import { Equipment } from "./inventory/equipment";
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
@@ -739,6 +740,15 @@ function handleClick(button: number): void {
       if (f !== undefined) {
         eat(player.survival, f.hunger, f.saturation);
         player.inventory.removeFromSlot(slot, 1);
+      }
+      return;
+    }
+    if (action.kind === "equip") {
+      const armorSlot = Equipment.slotFor(held.itemId);
+      if (armorSlot !== null) {
+        const prev = player.equipment.equip(armorSlot, held);
+        // The held piece is now worn; the bag slot takes whatever it displaced.
+        player.inventory.set(slot, prev);
       }
       return;
     }

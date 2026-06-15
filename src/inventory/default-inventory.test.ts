@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeDefaultInventory } from "./default-inventory";
-import { Items, isTool } from "../rules/items";
+import { Items, isTool, isArmor } from "../rules/items";
 import { Blocks } from "../rules/mc-1.20";
 
 describe("makeDefaultInventory", () => {
@@ -28,5 +28,23 @@ describe("makeDefaultInventory", () => {
     const inv = makeDefaultInventory();
     expect(inv.get(0)?.itemId).toBe(Blocks.OAK_PLANKS);
     expect(inv.get(7)?.itemId).toBe(Blocks.BED);
+  });
+  it("includes starter iron armor set in slots 9–12 (Phase 4)", () => {
+    const inv = makeDefaultInventory();
+    expect(inv.get(9)?.itemId).toBe(Items.IRON_HELMET);
+    expect(inv.get(10)?.itemId).toBe(Items.IRON_CHESTPLATE);
+    expect(inv.get(11)?.itemId).toBe(Items.IRON_LEGGINGS);
+    expect(inv.get(12)?.itemId).toBe(Items.IRON_BOOTS);
+    // Each armor piece is count:1 and carries durability.
+    for (const slot of [9, 10, 11, 12]) {
+      const piece = inv.get(slot);
+      expect(piece).not.toBeNull();
+      if (piece !== null) {
+        expect(piece.count).toBe(1);
+        expect(piece.maxStack).toBe(1);
+        expect(isArmor(piece.itemId)).toBe(true);
+        expect(piece.durability).toBeGreaterThan(0);
+      }
+    }
   });
 });

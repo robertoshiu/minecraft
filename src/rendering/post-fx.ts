@@ -29,6 +29,7 @@ import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPi
 // prePassRendererSceneComponent and geometryBufferRendererSceneComponent
 // side-effect imports also removed (they activate the geometry buffer path
 // that causes the per-frame ReadPixels stall).
+import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
 import type { Scene } from "@babylonjs/core/scene";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
 
@@ -46,6 +47,21 @@ export const DEFAULT_BLOOM_KERNEL = 4;
 export const DEFAULT_SSAO_INTENSITY = 0.4;
 /** Film-grain noise intensity (0..100 in Babylon's units; we use a small value). */
 export const DEFAULT_GRAIN_INTENSITY = 2;
+
+/** Image-processing exposure (HDR -> display). Slightly above 1 to lift midtones. */
+export const DEFAULT_EXPOSURE = 1.07;
+/** Image-processing contrast. Above 1 adds punch/depth. */
+export const DEFAULT_CONTRAST = 1.10;
+/** ColorCurves global hue: 0 = no shift. */
+export const DEFAULT_CC_GLOBAL_HUE = 0;
+/** ColorCurves global saturation. Babylon: 0 = neutral, +10..+30 subtly richer (range ~-100..100). Keep modest; QA-tunable. */
+export const DEFAULT_CC_GLOBAL_SATURATION = 12;
+/** ColorCurves global exposure: small warm lift. */
+export const DEFAULT_CC_GLOBAL_EXPOSURE = 0.05;
+/** ColorCurves shadow hue: cool (blue) tint in shadows. */
+export const DEFAULT_CC_SHADOWS_HUE = 200;
+/** ColorCurves shadow density: subtle cool tint strength in deep shadows. */
+export const DEFAULT_CC_SHADOWS_DENSITY = 12;
 
 // ---------------------------------------------------------------------------
 // PostFXController interface — exported for consumers and tests.
@@ -160,7 +176,17 @@ export function initPostFX(scene: Scene, camera: Camera): PostFXController {
     p.imageProcessingEnabled = true;
     p.imageProcessing.toneMappingEnabled = true;
     p.imageProcessing.toneMappingType = 1; // ImageProcessingConfiguration.TONEMAPPING_ACES
-    p.imageProcessing.exposure = 1.0;
+    p.imageProcessing.exposure = DEFAULT_EXPOSURE;
+    p.imageProcessing.contrast = DEFAULT_CONTRAST;
+    // Golden-hour grade on the existing pass (no new render target).
+    p.imageProcessing.colorCurvesEnabled = true;
+    const cc = new ColorCurves();
+    cc.globalHue = DEFAULT_CC_GLOBAL_HUE;
+    cc.globalSaturation = DEFAULT_CC_GLOBAL_SATURATION;
+    cc.globalExposure = DEFAULT_CC_GLOBAL_EXPOSURE;
+    cc.shadowsHue = DEFAULT_CC_SHADOWS_HUE;
+    cc.shadowsDensity = DEFAULT_CC_SHADOWS_DENSITY;
+    p.imageProcessing.colorCurves = cc;
     p.fxaaEnabled = false;
     p.sharpenEnabled = false;
     p.depthOfFieldEnabled = false;

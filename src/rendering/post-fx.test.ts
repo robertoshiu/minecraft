@@ -25,6 +25,9 @@ import {
   DEFAULT_BLOOM_KERNEL,
   DEFAULT_SSAO_INTENSITY,
   DEFAULT_GRAIN_INTENSITY,
+  DEFAULT_EXPOSURE,
+  DEFAULT_CONTRAST,
+  DEFAULT_CC_GLOBAL_SATURATION,
   type PostFXController,
 } from "./post-fx";
 
@@ -104,6 +107,21 @@ describe("design-spec constants", () => {
     // DESIGN.md specifies 0.02; Babylon's GrainPostProcess intensity is
     // on a 0..100 scale, so 0.02 * 100 = 2.
     expect(DEFAULT_GRAIN_INTENSITY).toBe(2);
+  });
+
+  it("exposure is a slight lift (1.0 < x <= 1.15)", () => {
+    expect(DEFAULT_EXPOSURE).toBeGreaterThan(1.0);
+    expect(DEFAULT_EXPOSURE).toBeLessThanOrEqual(1.15);
+  });
+
+  it("contrast adds modest punch (1.0 < x <= 1.20)", () => {
+    expect(DEFAULT_CONTRAST).toBeGreaterThan(1.0);
+    expect(DEFAULT_CONTRAST).toBeLessThanOrEqual(1.20);
+  });
+
+  it("color curves global saturation is subtly enriched (modest positive, not extreme)", () => {
+    expect(DEFAULT_CC_GLOBAL_SATURATION).toBeGreaterThan(0);
+    expect(DEFAULT_CC_GLOBAL_SATURATION).toBeLessThanOrEqual(40);
   });
 });
 

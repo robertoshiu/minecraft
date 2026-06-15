@@ -34,16 +34,18 @@ import { WorldRenderer, createTerrainMaterials } from "./rendering/world-rendere
 import { Player, type InputState } from "./player/controller";
 import { raycastVoxel } from "./interaction/raycast";
 import { breakBlock, placeBlock } from "./interaction/edit";
+import { resolveUse } from "./interaction/use-item";
+import { getItemDef } from "./rules/items";
 import { updateHotbarHud } from "./ui/hotbar-hud";
 import { updateSurvivalHud } from "./ui/survival-hud";
 import { makeStack, makeToolStack, isTool, damageTool } from "./inventory/stack";
 import { Inventory } from "./inventory/inventory";
-import { Blocks, EXHAUSTION, TICKS_PER_SECOND, TIME } from "./rules/mc-1.20";
+import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME } from "./rules/mc-1.20";
 import { makeClock, advance, tickOfDay, dayNumber } from "./time/clock";
 import { canSleep, sleepToDawn } from "./sleep/bed";
 import { skyColorAt } from "./time/sky";
 import { applySky } from "./game/daynight";
-import { addExhaustion } from "./survival/stats";
+import { addExhaustion, eat } from "./survival/stats";
 import { IndexedDbStore, type SaveStore } from "./save/store";
 import { deserializeColumn } from "./save/serialize";
 import { ChunkColumn } from "./chunk/column";
@@ -720,6 +722,26 @@ function handleClick(button: number): void {
       }
       return;
     }
+    // Route the right-click by held-item kind BEFORE falling through to place.
+    // placeBlock's BLOCK_COUNT guard stays the safe fallback — never weakened.
+    const slot = player.hotbar.selected;
+    const held = player.inventory.get(slot);
+    if (held === null || held.count <= 0) return;
+    const def = getItemDef(held.itemId);
+    const action = resolveUse(def, { hungry: player.survival.food < HUNGER.MAX_FOOD });
+    if (action.kind === "eat") {
+      const f = def.food;
+      if (f !== undefined) {
+        eat(player.survival, f.hunger, f.saturation);
+        player.inventory.removeFromSlot(slot, 1);
+      }
+      return;
+    }
+    if (action.kind === "use-other" || action.kind === "none") {
+      // Tools / materials have no right-click effect yet; no place audio/particles.
+      return;
+    }
+    // action.kind === "place": fall through to existing block placement.
     placeBlock(world, hit, renderer, player);
     const placePos = {
       x: hit.previous.x + 0.5,

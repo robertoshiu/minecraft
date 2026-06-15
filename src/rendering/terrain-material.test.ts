@@ -142,13 +142,23 @@ describe("createTerrainMaterials (atlas path)", () => {
     expect(frag).toContain("baseColor.rgb *= vFaceShade");
   });
 
-  it("fragment shader applies edge groove darkening via smoothstep (FIX 2)", () => {
+  it("fragment shader has gentle contact-AO: no hard outline, darken <= 12%", () => {
     const mats = createTerrainMaterials(scene);
     const opaque = mats.opaque as StandardMaterial;
     const frag = getPluginCode(opaque, "fragment", "CUSTOM_FRAGMENT_UPDATE_DIFFUSE");
+    // Contact-AO band present via smoothstep.
     expect(frag).toContain("smoothstep");
-    expect(frag).toContain("_seam");
-    expect(frag).toContain("mix(0.80");
+    // Hard outline pass is gone.
+    expect(frag).not.toContain("_outline");
+    // Seam variable removed.
+    expect(frag).not.toContain("_seam");
+    // Darkening factor at most 12% (mix lower-bound >= 0.88).
+    const mixMatch = frag.match(/mix\((0\.\d+)/);
+    expect(mixMatch).not.toBeNull();
+    if (mixMatch !== null) {
+      const lowerBound = parseFloat(mixMatch[1] ?? "0");
+      expect(lowerBound).toBeGreaterThanOrEqual(0.88);
+    }
   });
 
   it("atlas texture is created with no mipmaps (NEAREST_SAMPLINGMODE) to prevent mip-seam artifacts", () => {

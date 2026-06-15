@@ -195,8 +195,8 @@ varying float vFaceShade;
         // FIX 1: multiply by vFaceShade for per-face directional brightness.
         //   top=1.0, bottom=0.5, ±Z=0.8, ±X=0.6 (Minecraft canonical).
         //
-        // FIX 2: per-block edge grooves using fract(vAtlasUV) (block-space
-        //   coords). smoothstep at border → ~20% darkening at each cube edge.
+        // Task 2: replaced three stacked darkening passes (seam ~20%, wide AO
+        //   ~22%, hard outline 50%) with one gentle contact-AO (≤10%).
         CUSTOM_FRAGMENT_UPDATE_DIFFUSE: `
 {
   float _tileIdx = floor(vTileIndex + 0.5);
@@ -206,24 +206,15 @@ varying float vFaceShade;
   vec2 _atlasUV = (vec2(_col, _row) + _tileUV) / 16.0;
   vec4 _atlasSample = texture2D(atlasSampler, _atlasUV);
   baseColor.rgb = _atlasSample.rgb;
-  // FIX 1: baked per-face directional brightness (top bright, bottom dark).
+  // Per-face directional brightness (top bright, bottom dark, sides mid).
   baseColor.rgb *= vFaceShade;
-  // FIX 2: per-block edge groove using the per-block UV from fract(vAtlasUV).
-  // _g is in [0,1) per block; _edge is distance to nearest block border;
-  // smoothstep produces 0 at border, 1 in interior.
+  // Gentle contact-AO: one soft band, <=10% darken, no hard outline / no grid.
   vec2 _g = fract(vAtlasUV);
   float _edge = min(min(_g.x, 1.0 - _g.x), min(_g.y, 1.0 - _g.y));
-  float _seam = smoothstep(0.0, 0.06, _edge);
-  baseColor.rgb *= mix(0.80, 1.0, _seam);
-  // --- Cube definition: soft edge AO band + crisp per-block outline ---
-  // _bd = distance (in block-UV units) to the nearest block border, 0 at edge.
-  float _bd = _edge;
-  // Soft AO: darken up to ~22% within a wide band near every block edge → depth.
-  float _ao = smoothstep(0.0, 0.32, _bd);
-  baseColor.rgb *= mix(0.78, 1.0, _ao);
-  // Crisp thin outline: a hard dark line right at the block border → visible grid.
-  float _outline = 1.0 - smoothstep(0.0, 0.03, _bd);
-  baseColor.rgb = mix(baseColor.rgb, baseColor.rgb * 0.5, _outline);
+  // Narrow band (0.08) so AO only appears at close contact, not across the face.
+  float _contactAO = smoothstep(0.0, 0.08, _edge);
+  // mix(0.90, 1.0) -> at most ~10% darken at the extreme edge.
+  baseColor.rgb *= mix(0.90, 1.0, _contactAO);
 }
 `,
       };

@@ -131,24 +131,30 @@ export function sunLightIntensityAt(tod: number): number {
   return smoothstep(f);
 }
 
+/** Sun-arc tuning: flatten the vertical arc (raw sine scaled by sin of this angle). */
+const SUN_MAX_ELEV_DEG = 65;
+/** Sun-arc tuning: fixed southward tilt so light rakes from the south. */
+const SUN_SOUTHWARD_TILT = 0.15;
+
 /**
  * A normalised sun direction `[x, y, z]` for the directional light.
  *
- * The vertical component is capped at sin(65°) so the sun never reaches
- * directly overhead — it stays at a raking angle that yields golden-hour
- * shadows. At tod 6000 (noon) the sun is ~65° elevation; at the golden-hour
- * spawn TOD (~10000) it is lower (~25–30°), producing strong side-lighting.
- * x gives the east→west sweep; z is a small fixed southward tilt.
+ * The raw vertical term is scaled by sin(65°) so the sun's arc is flattened
+ * (it never points straight down). Combined with the fixed southward tilt and
+ * renormalization, the resulting elevation is ~80° at noon (tod 6000) and a low
+ * ~27° at the golden-hour spawn time (tod ~10000, set in main.ts) — giving
+ * strong raking side-light at spawn. x gives the east→west sweep; z is a small
+ * fixed southward tilt.
  */
 export function sunDirectionAt(tod: number): RGB {
   const t = wrapTod(tod);
   const theta = (t / DAY) * Math.PI * 2;
   // Cap vertical component so the sun never goes fully overhead.
-  const MAX_ELEV = (65 * Math.PI) / 180; // 65° in radians
+  const MAX_ELEV = (SUN_MAX_ELEV_DEG * Math.PI) / 180;
   const y = Math.sin(theta) * Math.sin(MAX_ELEV);
   const x = Math.cos(theta);
   // Small fixed southward tilt for raking light from the south.
-  const z = 0.15;
+  const z = SUN_SOUTHWARD_TILT;
   const len = Math.sqrt(x * x + y * y + z * z) || 1;
   return [x / len, y / len, z / len];
 }

@@ -112,3 +112,16 @@ describe("applySky", () => {
     expect(scene.clearColor.r).toBeCloseTo(r, 5);
   });
 });
+
+describe("golden-hour spawn TOD", () => {
+  it("spawn TOD 10000 is before SUNSET_START (full sun intensity)", () => {
+    const SPAWN_TOD = 10000;
+    expect(SPAWN_TOD).toBeLessThan(TIME.SUNSET_START);
+    expect(sunLightIntensityAt(SPAWN_TOD)).toBeCloseTo(1.0, 5);
+  });
+
+  it("skyColorAt(10000) is warm (red channel dominant over blue)", () => {
+    const [r, , b] = skyColorAt(10000);
+    expect(r).toBeGreaterThan(b);
+  });
+});

@@ -98,8 +98,9 @@ const scene = new Scene(engine);
 
 // --- Game clock: drives the day/night cycle (advanced 1 tick per fixed tick).
 // 24000 ticks/day at 20 TPS = 1200 real seconds = 20 min (== TIME constants).
-// Start at midday (tick 6000) so a fresh world spawns in bright daylight, not dim dawn.
-const clock = makeClock(6000);
+// Spawn at the golden-hour keyframe (TOD 10000): low raking sun (~27 deg),
+// warm amber sky, full sun intensity (< SUNSET_START=12000).
+const clock = makeClock(10000);
 
 // Initialize the sky color from the clock's starting time-of-day.
 const [sky0r, sky0g, sky0b] = skyColorAt(tickOfDay(clock));

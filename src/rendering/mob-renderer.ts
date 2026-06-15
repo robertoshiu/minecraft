@@ -28,7 +28,7 @@ import type { Mob } from "../mobs/entity";
 import type { MobType } from "../rules/mob-stats";
 import type { ShadowCasterSink } from "./world-renderer";
 import { TICKS_PER_SECOND } from "../rules/mc-1.20";
-import { legSwing, easeToRest, DEFAULT_GAIT } from "./mob-animation";
+import { legSwing, easeToRest, DEFAULT_GAIT, type GaitParams } from "./mob-animation";
 
 // ---------------------------------------------------------------------------
 // Animation constants
@@ -56,6 +56,13 @@ const MOB_COLORS: Record<MobType, string> = {
 // Model definition types
 // ---------------------------------------------------------------------------
 
+/** Pivot role: which animation channel drives this part. */
+type PivotRole = "leg" | "head" | "tail" | "ear";
+
+/** Logical role used to look up the atlas UV region for a part. */
+type PartRole =
+  | "body" | "head" | "leg" | "snout" | "horn" | "beak" | "arm" | "tail" | "ear";
+
 /** One part of a mob model: a box with size, local offset, optional color, optional leg flag. */
 interface PartDef {
   /** Box dimensions. */
@@ -69,16 +76,23 @@ interface PartDef {
   /** Hex color override; if omitted uses the mob's base color. */
   color?: string;
   /**
+   * DEPRECATED alias for pivotRole:"leg"; still honoured.
    * If true this part is a LEG: a pivot TransformNode is placed at (x, y, z)
    * and the box mesh is parented to the pivot with its origin at the top of
    * the box, so rotating the pivot swings the leg about the hip.
    */
   isLeg?: true;
+  /** Which animation channel (if any) owns this part's pivot. */
+  pivotRole?: PivotRole;
+  /** Logical role → selects the atlas UV region (Task 5). Defaults to "body". */
+  role?: PartRole;
 }
 
 /** Full model definition for a mob type. */
 interface ModelDef {
   parts: PartDef[];
+  /** Per-species gait tuning; defaults to DEFAULT_GAIT when omitted. */
+  gait?: GaitParams;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +141,7 @@ const MODELS: Record<MobType, ModelDef> = {
       // 4 legs — hip at y=0.50, leg length 0.50
       ...quadLegs(0.50, 0.50, 0.20, 0.20, 0.28, 0.18),
     ],
+    gait: { freq: 0.28, amp: 0.45 },
   },
 
   // -------------------------------------------------------------------------
@@ -318,8 +333,10 @@ export class MobRenderer {
     modelDef.parts.forEach((part, i) => {
       const color = part.color ?? baseColor;
       const mat = this.materialFor(color);
+      const pivotRole: PivotRole | undefined =
+        part.pivotRole ?? (part.isLeg ? "leg" : undefined);
 
-      if (part.isLeg) {
+      if (pivotRole === "leg") {
         // Create a pivot at the hip position relative to root.
         const pivot = new TransformNode(`mob_${mob.id}_legpivot_${i}`, this.scene);
         pivot.parent = root;

@@ -10,11 +10,13 @@ Do not deviate without explicit user approval.
 
 **Direction**: Minecraft RTX warmth meets Valheim's grounded materiality.
 
-The default lighting is **warm golden-hour IBL** (Poly Haven "kloofendal" HDRI, sun at 25° elevation, azimuth 135°). This is not noon-bright vanilla MC; it is the 30 minutes before sunset where everything reads as cinematic. Key light color temperature: 5200K; ambient fill: 7500K cool blue sky bounce. The warm/cool split gives depth without saturation tricks.
+The default lighting is **warm golden-hour IBL** (Poly Haven "kloofendal" HDRI, sun at ~27° elevation, azimuth 135°). This is not noon-bright vanilla MC; it is the 30 minutes before sunset where everything reads as cinematic. Key light color temperature: 5200K; ambient fill: 7500K cool blue sky bounce. The warm/cool split gives depth without saturation tricks.
 
-**Color saturation**: Faithful-to-nature base with +12% saturation on ores and emissives only. Grass is a believable olive-green (#5a7a32), not neon. Diamond ore gets a +20% saturation boost on the emissive channel so it reads as "precious" against muted stone. Lava is #ff6a00 at 1.8 emissive intensity — it must feel dangerous.
+**Spawn time-of-day**: TOD 10000 (golden hour — sun low, amber sky, raking light). The old noon spawn (TOD 6000) is no longer the default.
 
-**Edge treatment**: Sharp-edged PBR with 0.02px bevel via normal map only (no geometry bevels). This preserves the voxel silhouette while catching light on edges. Roughness per material: stone 0.85, polished planks 0.55, ore deposits 0.3 (slight sheen signals rarity).
+**Color saturation**: Warmed and slightly-saturated base colors baked into the atlas palette (the atlas is the sole hue source for terrain). Grass is a believable olive-green (#5a7a32), not neon. Diamond ore gets a +20% saturation boost on the emissive channel so it reads as "precious" against muted stone. Lava is #ff6a00 at 1.8 emissive intensity — it must feel dangerous.
+
+**Edge treatment**: ONE gentle contact-AO band (≤10% darken, 0.08 band width). Hard outline and wide AO have been removed — they created a dark grid over every block face. No geometry bevels; voxel silhouette is preserved.
 
 **Emissive blocks** (only 6 types emit light):
 
@@ -29,7 +31,64 @@ The default lighting is **warm golden-hour IBL** (Poly Haven "kloofendal" HDRI, 
 
 **Post-FX**: Restrained. Bloom threshold 0.85, intensity 0.3, radius 4px (emissives and sun specular only). Subtle film grain at 0.02 opacity (animated, breaks cave banding). No chromatic aberration, no vignette, no LUT. SSAO at 0.4 intensity, radius 0.5, to ground blocks against each other.
 
+**Post grade (layered on existing ACES tonemapping pass)**: exposure 1.07, contrast 1.10; ColorCurves: globalSaturation +12, globalExposure 0.05, shadowsHue 200, shadowsDensity 12.
+
 **References**: Minecraft RTX beta (warm torch-lit cave), Valheim (material warmth + restrained particles), Subnautica (IBL-driven depth).
+
+---
+
+## Rendering Values (Phase-1 Golden-Hour Cure)
+
+These are the locked target values shipped in Phase-1. Update only when a new rendering phase is approved.
+
+### Time-of-Day & Sky
+
+**Spawn TOD**: 10000 (golden hour). Previously 6000 (noon).
+
+**Sky color keyframes** (linear RGB, interpolated by the day/night cycle):
+
+| TOD | Name | R | G | B |
+|---|---|---|---|---|
+| 0 | Morning | 0.60 | 0.68 | 0.88 |
+| 6000 | Noon | 0.55 | 0.70 | 0.90 |
+| 10000 | Golden hour (spawn) | 0.82 | 0.62 | 0.38 |
+| 12000 | Afternoon | 0.58 | 0.66 | 0.82 |
+
+**Fog**: Decoupled from sky color. During daytime, a warm offset is applied over the sky value, intensity-scaled: +0.04 R, +0.02 G, −0.03 B. This keeps horizon haze amber-tinted without contaminating the sky gradient.
+
+### Sun Arc
+
+Vertical elevation term scaled by sin(65°) (raking angle): ~80° elevation at noon (TOD 6000), ~27° elevation at golden-hour spawn (TOD 10000). Horizontal arc covers full east-to-west sweep.
+
+### Lighting
+
+| Light | Property | Value | Notes |
+|---|---|---|---|
+| Sun (DirectionalLight) | diffuse | `[1.0, 0.88, 0.70]` | ~5200K warm key |
+| Hemi sky (HemisphericLight) | diffuse | `[0.88, 0.93, 1.0]` | ~7500K cool sky fill |
+| Hemi sky | groundColor | `[0.42, 0.36, 0.28]` | Warm bounce from terrain |
+| Scene | ambientColor | `[0.16, 0.14, 0.11]` | Warm-low ambient floor |
+
+### Post Grade
+
+Applied on top of the existing ACES tonemapping pass (not a separate pipeline stage):
+
+| Parameter | Value |
+|---|---|
+| exposure | 1.07 |
+| contrast | 1.10 |
+| ColorCurves.globalSaturation | +12 |
+| ColorCurves.globalExposure | 0.05 |
+| ColorCurves.shadowsHue | 200 |
+| ColorCurves.shadowsDensity | 12 |
+
+### Terrain Shader AO
+
+Hard outline and wide ambient-occlusion removed (they caused a dark grid on every block face). Replaced with ONE gentle contact-AO: maximum 10% darkening, 0.08 band width.
+
+### Palette
+
+The block atlas is the sole hue source for terrain color. Base colors are warmed and slightly saturated relative to vanilla — no procedural recoloring at runtime. The palette was committed in the `feat(palette)` task.
 
 ---
 

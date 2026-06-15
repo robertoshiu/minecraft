@@ -23,6 +23,10 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import { Vector4 } from "@babylonjs/core/Maths/math.vector";
+import { generateMobAtlasRGBA, uvRegion, faceUVForRect, MOB_ATLAS_PX } from "./mob-atlas";
 
 import type { Mob } from "../mobs/entity";
 import type { MobType } from "../rules/mob-stats";
@@ -39,21 +43,6 @@ import {
 
 /** Max animation advance per sync, in ticks (~0.2s) — prevents a snap after a tab-switch/pause. */
 const MAX_VISUAL_DT_TICKS = 4;
-
-// ---------------------------------------------------------------------------
-// Color constants
-// ---------------------------------------------------------------------------
-
-/** Base body color per mob type. */
-const MOB_COLORS: Record<MobType, string> = {
-  cow:      "#6b4f3a",
-  pig:      "#e0a0a8",
-  sheep:    "#e8e8e0",
-  chicken:  "#f0e8c0",
-  zombie:   "#3a7d3a",
-  skeleton: "#d8d8d0",
-  creeper:  "#2f7d33",
-};
 
 // ---------------------------------------------------------------------------
 // Model definition types
@@ -295,8 +284,10 @@ export class MobRenderer {
   private readonly scene: Scene;
   /** Live mob records keyed by mob id. */
   private readonly records = new Map<number, MobRecord>();
-  /** One StandardMaterial per hex color string, shared across all mobs. */
+  /** One StandardMaterial per "species:role" key, shared across all mobs of the same type+role. */
   private readonly materials = new Map<string, StandardMaterial>();
+  /** Shared mob atlas RawTexture — created lazily on first materialFor() call. */
+  private mobAtlasTex: RawTexture | null = null;
   /** Optional shadow caster sink for CSM registration. */
   private shadowSink: ShadowCasterSink | null = null;
   /** Last wall-clock timestamp passed to sync(); undefined until first live call. */
@@ -317,15 +308,43 @@ export class MobRenderer {
 
   // ---- Material cache -------------------------------------------------------
 
-  /** Return (creating if needed) the cached material for a hex color string. */
-  private materialFor(hexColor: string): StandardMaterial {
-    const existing = this.materials.get(hexColor);
+  /**
+   * Return (creating if needed) the cached material keyed by "species:role".
+   * All parts of the same (species, role) across all mobs share ONE material
+   * instance — this is the invariant that mob-renderer.test.ts pins with `toBe`.
+   *
+   * The shared mob atlas RawTexture is created lazily on the first call and
+   * reused for every material created after that.
+   */
+  private materialFor(speciesRole: string): StandardMaterial {
+    const existing = this.materials.get(speciesRole);
     if (existing !== undefined) return existing;
 
-    const mat = new StandardMaterial(`mob-mat-${hexColor}`, this.scene);
-    mat.diffuseColor = Color3.FromHexString(hexColor);
+    // Lazily create the shared mob atlas texture.
+    if (this.mobAtlasTex === null) {
+      const atlasData = generateMobAtlasRGBA();
+      this.mobAtlasTex = new RawTexture(
+        atlasData,
+        MOB_ATLAS_PX,
+        MOB_ATLAS_PX,
+        // TEXTUREFORMAT_RGBA = 5
+        5,
+        this.scene,
+        /* generateMipMaps */ false,
+        /* invertY */ false,
+        Texture.NEAREST_SAMPLINGMODE,
+      );
+      this.mobAtlasTex.wrapU = Texture.CLAMP_ADDRESSMODE;
+      this.mobAtlasTex.wrapV = Texture.CLAMP_ADDRESSMODE;
+      this.mobAtlasTex.name = "mob-atlas";
+    }
+
+    const mat = new StandardMaterial(`mob-mat-${speciesRole}`, this.scene);
+    mat.diffuseColor = new Color3(1, 1, 1);
+    mat.ambientColor = new Color3(1, 1, 1);
     mat.specularColor = new Color3(0, 0, 0);
-    this.materials.set(hexColor, mat);
+    mat.diffuseTexture = this.mobAtlasTex;
+    this.materials.set(speciesRole, mat);
     return mat;
   }
 
@@ -342,15 +361,57 @@ export class MobRenderer {
     swayPivots: TransformNode[];
   } {
     const modelDef = MODELS[mob.type];
-    const baseColor = MOB_COLORS[mob.type];
     const partMeshes: Mesh[] = [];
     const legPivots: TransformNode[] = [];
     let headPivot: TransformNode | null = null;
     const swayPivots: TransformNode[] = [];
 
     modelDef.parts.forEach((part, i) => {
-      const color = part.color ?? baseColor;
-      const mat = this.materialFor(color);
+      // Determine the atlas material: key is "species:role" for atlas parts,
+      // or "color:<hex>" for override-color parts (horns, snout, beak, arms).
+      // Parts with an explicit color override use that color as a flat material;
+      // parts without override use the species:role atlas material.
+      const partRole: PartRole = part.role ?? (
+        (part.pivotRole === "leg" || part.isLeg) ? "leg" :
+        part.pivotRole === "head"                ? "head" :
+        part.pivotRole === "tail"                ? "tail" :
+        part.pivotRole === "ear"                 ? "ear" :
+        "body"
+      );
+
+      let mat: StandardMaterial;
+      let faceUV: Vector4[];
+
+      if (part.color !== undefined) {
+        // Override-color part (horn, snout, beak, arm override, etc.):
+        // use the old hex-color material so the tint is visible.
+        // Key as "color:<hex>" so it doesn't collide with species:role keys.
+        const colorKey = `color:${part.color}`;
+        const existing = this.materials.get(colorKey);
+        if (existing !== undefined) {
+          mat = existing;
+        } else {
+          mat = new StandardMaterial(`mob-mat-${colorKey}`, this.scene);
+          mat.diffuseColor = Color3.FromHexString(part.color);
+          mat.specularColor = new Color3(0, 0, 0);
+          this.materials.set(colorKey, mat);
+        }
+        // Override-color parts use a degenerate UV rect so they show flat color.
+        // (No diffuseTexture assigned → UV doesn't matter, but faceUV is still
+        // required if the mesh was built with faceUV.  We pass unit UVs instead.)
+        const unitFace = { x: 0, y: 0, z: 1, w: 1 };
+        faceUV = [unitFace, unitFace, unitFace, unitFace, unitFace, unitFace].map(
+          (f) => new Vector4(f.x, f.y, f.z, f.w),
+        );
+      } else {
+        // Atlas material: shared per species:role.
+        const matKey = `${mob.type}:${partRole}`;
+        mat = this.materialFor(matKey);
+        faceUV = faceUVForRect(uvRegion(mob.type, partRole)).map(
+          (f) => new Vector4(f.x, f.y, f.z, f.w),
+        );
+      }
+
       const pivotRole: PivotRole | undefined =
         part.pivotRole ?? (part.isLeg ? "leg" : undefined);
 
@@ -364,7 +425,7 @@ export class MobRenderer {
         // so the box center sits at -legH/2 (i.e. the box hangs below the pivot).
         const box = CreateBox(
           `mob_${mob.id}_part_${i}`,
-          { width: part.w, height: part.h, depth: part.d },
+          { width: part.w, height: part.h, depth: part.d, faceUV },
           this.scene,
         );
         box.parent = pivot;
@@ -385,7 +446,7 @@ export class MobRenderer {
 
         const box = CreateBox(
           `mob_${mob.id}_part_${i}`,
-          { width: part.w, height: part.h, depth: part.d },
+          { width: part.w, height: part.h, depth: part.d, faceUV },
           this.scene,
         );
         box.parent = pivot;
@@ -406,7 +467,7 @@ export class MobRenderer {
 
         const box = CreateBox(
           `mob_${mob.id}_part_${i}`,
-          { width: part.w, height: part.h, depth: part.d },
+          { width: part.w, height: part.h, depth: part.d, faceUV },
           this.scene,
         );
         box.parent = pivot;
@@ -422,7 +483,7 @@ export class MobRenderer {
         // Non-pivot part: position is the CENTER of the box in root space.
         const box = CreateBox(
           `mob_${mob.id}_part_${i}`,
-          { width: part.w, height: part.h, depth: part.d },
+          { width: part.w, height: part.h, depth: part.d, faceUV },
           this.scene,
         );
         box.parent = root;
@@ -552,5 +613,8 @@ export class MobRenderer {
 
     for (const mat of this.materials.values()) mat.dispose();
     this.materials.clear();
+
+    this.mobAtlasTex?.dispose();
+    this.mobAtlasTex = null;
   }
 }

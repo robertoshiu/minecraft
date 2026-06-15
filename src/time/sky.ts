@@ -134,21 +134,21 @@ export function sunLightIntensityAt(tod: number): number {
 /**
  * A normalised sun direction `[x, y, z]` for the directional light.
  *
- * The sun travels a great circle: overhead-ish at noon (tod 6000, y near +1)
- * and below the horizon at midnight (tod 18000, y near -1). Parameterised so
- * tod 0 is sunrise-side on the horizon and the motion is perfectly circular
- * (tod 24000 == tod 0).
+ * The vertical component is capped at sin(65°) so the sun never reaches
+ * directly overhead — it stays at a raking angle that yields golden-hour
+ * shadows. At tod 6000 (noon) the sun is ~65° elevation; at the golden-hour
+ * spawn TOD (~10000) it is lower (~25–30°), producing strong side-lighting.
+ * x gives the east→west sweep; z is a small fixed southward tilt.
  */
 export function sunDirectionAt(tod: number): RGB {
   const t = wrapTod(tod);
-  // Angle around the day: 0 at tod 0, 2π at tod 24000.
   const theta = (t / DAY) * Math.PI * 2;
-  // Height peaks at noon (tod 6000 => theta = π/2 => sin = 1) and bottoms at
-  // midnight (tod 18000 => theta = 3π/2 => sin = -1).
-  const y = Math.sin(theta);
-  // Horizontal component sweeps across the sky; keep z small for a fixed tilt.
+  // Cap vertical component so the sun never goes fully overhead.
+  const MAX_ELEV = (65 * Math.PI) / 180; // 65° in radians
+  const y = Math.sin(theta) * Math.sin(MAX_ELEV);
   const x = Math.cos(theta);
-  const z = 0;
+  // Small fixed southward tilt for raking light from the south.
+  const z = 0.15;
   const len = Math.sqrt(x * x + y * y + z * z) || 1;
   return [x / len, y / len, z / len];
 }

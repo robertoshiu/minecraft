@@ -134,8 +134,10 @@ const MODELS: Record<MobType, ModelDef> = {
     parts: [
       // body
       { w: 0.80, h: 0.60, d: 0.50, x: 0, y: 0.80, z: 0 },
-      // head (front) — driven by head look channel
-      { w: 0.50, h: 0.45, d: 0.45, x: 0, y: 1.05, z: 0.30, pivotRole: "head", role: "head" },
+      // head (front) — driven by head look channel.
+      // Pivot sits at the neck base (y = 0.825 = old center 1.05 − h/2 0.225) so the
+      // +h/2 box offset in buildModel restores the box centre to 1.05 exactly.
+      { w: 0.50, h: 0.45, d: 0.45, x: 0, y: 0.825, z: 0.30, pivotRole: "head", role: "head" },
       // horns (two small dark bumps on top of head) — optional decorative parts
       { w: 0.08, h: 0.15, d: 0.08, x: -0.16, y: 1.38, z: 0.28, color: "#3b2a1a" },
       { w: 0.08, h: 0.15, d: 0.08, x:  0.16, y: 1.38, z: 0.28, color: "#3b2a1a" },
@@ -393,7 +395,7 @@ export class MobRenderer {
         box.receiveShadows = true;
         this.shadowSink?.addShadowCaster(box);
 
-        // First head pivot wins (or last; spec says "last one wins / first head" — we use first).
+        // First head pivot wins (models have a single head).
         if (headPivot === null) headPivot = pivot;
         partMeshes.push(box);
       } else if (pivotRole === "tail" || pivotRole === "ear") {
@@ -498,7 +500,7 @@ export class MobRenderer {
       // Expressive channels (live path only; test path stays byte-identical).
       if (nowMs !== undefined) {
         if (record.headPivot !== null) {
-          record.headPivot.rotation.x = headPitch(0.1) * 0.5; // gentle ambient look
+          record.headPivot.rotation.x = headPitch(0.1) * 0.5; // fixed ambient down-tilt placeholder; dynamic look-at is a later task
         }
         for (const pivot of record.swayPivots) {
           pivot.rotation.z = tailSway(t);

@@ -21,42 +21,42 @@ export type RGB = [number, number, number];
  * `block-registry.ts`. Indices not present here fall back to {@link FALLBACK}.
  */
 const TILE_COLORS: Readonly<Record<number, RGB>> = {
-  0: [0.0, 0.0, 0.0], // air_blank — never rendered
-  1: [0.5, 0.5, 0.5], // stone — mid gray
-  2: [0.45, 0.32, 0.2], // dirt — brown
-  3: [0.35, 0.55, 0.2], // grass_top — olive green
-  4: [0.42, 0.46, 0.24], // grass_side — brownish-green
-  5: [0.85, 0.8, 0.62], // sand — pale tan
-  6: [0.18, 0.36, 0.7], // water — blue
-  7: [0.45, 0.34, 0.22], // oak_log_side — brown bark
-  8: [0.62, 0.5, 0.34], // oak_log_end — lighter end-grain
-  9: [0.22, 0.45, 0.16], // oak_leaves — green
-  10: [0.66, 0.52, 0.33], // oak_planks — tan wood
-  11: [0.42, 0.42, 0.42], // cobblestone — dark gray
-  12: [0.75, 0.85, 0.9], // glass — pale blue-white
-  13: [0.28, 0.28, 0.3], // coal_ore — stone-gray, dark tint
-  14: [0.56, 0.48, 0.42], // iron_ore — stone-gray, tan tint
-  15: [0.66, 0.6, 0.32], // gold_ore — stone-gray, yellow tint
-  16: [0.6, 0.32, 0.32], // redstone_ore — stone-gray, red tint
-  17: [0.4, 0.62, 0.64], // diamond_ore — stone-gray, cyan tint
-  18: [0.32, 0.4, 0.62], // lapis_ore — stone-gray, blue tint
+  0:  [0.0,  0.0,  0.0 ], // air_blank — never rendered
+  1:  [0.54, 0.52, 0.48], // stone — warm grey
+  2:  [0.52, 0.34, 0.18], // dirt — richer warm brown
+  3:  [0.38, 0.58, 0.16], // grass_top — vivid warm yellow-green
+  4:  [0.46, 0.48, 0.20], // grass_side — warmer brownish-green
+  5:  [0.90, 0.84, 0.60], // sand — richer warm tan
+  6:  [0.16, 0.38, 0.72], // water — slightly richer blue
+  7:  [0.50, 0.36, 0.20], // oak_log_side — richer warm bark
+  8:  [0.68, 0.54, 0.32], // oak_log_end — warmer end-grain
+  9:  [0.24, 0.48, 0.14], // oak_leaves — vivid green
+  10: [0.72, 0.56, 0.30], // oak_planks — richer warm tan wood
+  11: [0.46, 0.44, 0.40], // cobblestone — warm dark grey
+  12: [0.78, 0.86, 0.90], // glass — pale blue-white
+  13: [0.30, 0.28, 0.26], // coal_ore — warm dark
+  14: [0.60, 0.50, 0.40], // iron_ore — warm tan
+  15: [0.70, 0.64, 0.28], // gold_ore — richer yellow
+  16: [0.64, 0.28, 0.28], // redstone_ore — deeper red
+  17: [0.36, 0.64, 0.66], // diamond_ore — vivid cyan
+  18: [0.28, 0.38, 0.66], // lapis_ore — deeper blue
   19: [0.12, 0.12, 0.13], // bedrock — near-black
-  20: [0.95, 0.96, 0.98], // snow — white
-  21: [0.5, 0.48, 0.46], // gravel — speckled gray
-  22: [0.6, 0.46, 0.3], // crafting_table_top
-  23: [0.66, 0.52, 0.33], // crafting_table_bottom — planks look
-  24: [0.58, 0.44, 0.28], // crafting_table_side
-  25: [0.36, 0.36, 0.38], // furnace_top — dark stone
-  26: [0.4, 0.4, 0.42], // furnace_side
-  27: [0.3, 0.3, 0.32], // furnace_front — fire hole, darker
-  28: [0.85, 0.65, 0.3], // torch — warm orange
-  29: [0.92, 0.85, 0.55], // glowstone — bright yellow
-  30: [0.85, 0.35, 0.12], // lava — orange-red
-  31: [0.86, 0.86, 0.82], // birch_log_side — pale bark
-  32: [0.8, 0.76, 0.6], // birch_log_end
-  33: [0.3, 0.5, 0.22], // birch_leaves — green
-  34: [0.78, 0.7, 0.5], // birch_planks — pale wood
-  35: [0.78, 0.16, 0.18], // bed — warm red
+  20: [0.94, 0.96, 0.98], // snow — white
+  21: [0.54, 0.50, 0.46], // gravel — warm speckled grey
+  22: [0.64, 0.48, 0.28], // crafting_table_top — warmer
+  23: [0.70, 0.56, 0.30], // crafting_table_bottom — planks
+  24: [0.62, 0.46, 0.24], // crafting_table_side — warmer
+  25: [0.38, 0.36, 0.34], // furnace_top — warm dark stone
+  26: [0.44, 0.42, 0.38], // furnace_side — warm stone
+  27: [0.30, 0.28, 0.26], // furnace_front — darker warm
+  28: [0.90, 0.68, 0.28], // torch — richer warm orange
+  29: [0.94, 0.88, 0.52], // glowstone — rich yellow
+  30: [0.88, 0.32, 0.10], // lava — vivid orange-red
+  31: [0.88, 0.86, 0.80], // birch_log_side — warm pale bark
+  32: [0.84, 0.78, 0.58], // birch_log_end — warmer
+  33: [0.28, 0.52, 0.18], // birch_leaves — vivid green
+  34: [0.82, 0.74, 0.48], // birch_planks — richer warm pale wood
+  35: [0.82, 0.14, 0.16], // bed — vivid warm red
 };
 
 /** Fallback color for unknown tile indices (magenta-ish, easy to spot). */

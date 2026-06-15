@@ -27,6 +27,7 @@ import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Vector4 } from "@babylonjs/core/Maths/math.vector";
 import { generateMobAtlasRGBA, uvRegion, faceUVForRect, MOB_ATLAS_PX } from "./mob-atlas";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 
 import type { Mob } from "../mobs/entity";
 import type { MobType } from "../rules/mob-stats";
@@ -34,7 +35,7 @@ import type { ShadowCasterSink } from "./world-renderer";
 import { TICKS_PER_SECOND } from "../rules/mc-1.20";
 import {
   legSwing, easeToRest, idleBob, tailSway, headPitch,
-  DEFAULT_GAIT, type GaitParams,
+  DEFAULT_GAIT, type GaitParams, tintFor,
 } from "./mob-animation";
 
 // ---------------------------------------------------------------------------
@@ -350,6 +351,23 @@ export class MobRenderer {
 
   // ---- Model building -------------------------------------------------------
 
+  /** Paint a deterministic per-individual RGBA vertex-color buffer on a box (multiplies the texture). */
+  private applyTint(box: Mesh, mobId: number): void {
+    const [r, g, b] = tintFor(mobId);
+    const positions = box.getVerticesData(VertexBuffer.PositionKind);
+    if (positions === null) return; // NullEngine / no geometry → skip safely
+    const vertexCount = positions.length / 3;
+    const colors = new Float32Array(vertexCount * 4);
+    for (let i = 0; i < vertexCount; i++) {
+      colors[i * 4 + 0] = r;
+      colors[i * 4 + 1] = g;
+      colors[i * 4 + 2] = b;
+      colors[i * 4 + 3] = 1;
+    }
+    box.setVerticesData(VertexBuffer.ColorKind, colors);
+    box.useVertexColors = true;
+  }
+
   /**
    * Build all part meshes + pivot nodes for `mob`, parent them under `root`,
    * and return the record (without storing it).
@@ -432,6 +450,7 @@ export class MobRenderer {
         // Offset the box so its top aligns with the pivot (y=0 in pivot space).
         box.position.set(0, -part.h / 2, 0);
         box.material = mat;
+        this.applyTint(box, mob.id);
         box.receiveShadows = true;
         this.shadowSink?.addShadowCaster(box);
 
@@ -453,6 +472,7 @@ export class MobRenderer {
         // Box center is offset so rotation pivots about the bottom of the head.
         box.position.set(0, part.h / 2, 0);
         box.material = mat;
+        this.applyTint(box, mob.id);
         box.receiveShadows = true;
         this.shadowSink?.addShadowCaster(box);
 
@@ -474,6 +494,7 @@ export class MobRenderer {
         // Box center offset below the pivot so rotation swings about the attachment point.
         box.position.set(0, -part.h / 2, 0);
         box.material = mat;
+        this.applyTint(box, mob.id);
         box.receiveShadows = true;
         this.shadowSink?.addShadowCaster(box);
 
@@ -489,6 +510,7 @@ export class MobRenderer {
         box.parent = root;
         box.position.set(part.x, part.y, part.z);
         box.material = mat;
+        this.applyTint(box, mob.id);
         box.receiveShadows = true;
         this.shadowSink?.addShadowCaster(box);
 
@@ -537,6 +559,11 @@ export class MobRenderer {
       // Update root transform: position at feet, rotate by yaw.
       record.root.position.set(mob.feet.x, mob.feet.y, mob.feet.z);
       record.root.rotation.y = mob.yaw;
+
+      // Visual-only baby scale: shrinks the render root ONLY. aabb() reads
+      // MOB_STATS directly (entity.ts) so the hitbox stays adult-sized.
+      const babyScale = mob.extra["babyScale"] ?? 1.0;
+      record.root.scaling.setAll(babyScale);
 
       // Continuous animation clock: advance by real delta when available, else
       // fall back to the tick-quantized mob.age (test path → identical to before).

@@ -120,4 +120,59 @@ describe("generateAtlasRGBA", () => {
   it("atlas grid constants are consistent: ATLAS_GRID * TILE_PX === ATLAS_PX", () => {
     expect(ATLAS_GRID * TILE_PX).toBe(ATLAS_PX);
   });
+
+  // ── FIX 3: boosted tile detail / variance assertions ───────────────────────
+
+  /**
+   * Compute the per-channel standard deviation of all texels in a tile cell.
+   * A higher value means more visible intra-tile variation (better texture).
+   */
+  function tileLuminanceStdDev(index: number): number {
+    const col = tileCol(index);
+    const row = tileRow(index);
+    const cellX = col * TILE_PX;
+    const cellY = row * TILE_PX;
+    const values: number[] = [];
+    for (let ly = 0; ly < TILE_PX; ly++) {
+      for (let lx = 0; lx < TILE_PX; lx++) {
+        const ax = cellX + lx;
+        const ay = cellY + ly;
+        const o = (ay * ATLAS_PX + ax) * 4;
+        // Use luminance (perceptual approximation) to measure brightness variation.
+        const r = (atlas[o] ?? 0) / 255;
+        const g = (atlas[o + 1] ?? 0) / 255;
+        const b = (atlas[o + 2] ?? 0) / 255;
+        values.push(0.299 * r + 0.587 * g + 0.114 * b);
+      }
+    }
+    const n = values.length;
+    const mean = values.reduce((a, v) => a + v, 0) / n;
+    const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / n;
+    return Math.sqrt(variance);
+  }
+
+  it("grass_top tile (index 3) has higher intra-tile luminance variance than 0.02", () => {
+    // Pre-fix the fallback was ±2% variation (stdDev ≈ 0.006–0.010).
+    // Post-fix the grass clumpy pattern yields stdDev well above 0.02.
+    const stdDev = tileLuminanceStdDev(3);
+    expect(stdDev).toBeGreaterThan(0.02);
+  });
+
+  it("grass_side tile (index 4) has higher intra-tile luminance variance than 0.02", () => {
+    const stdDev = tileLuminanceStdDev(4);
+    expect(stdDev).toBeGreaterThan(0.02);
+  });
+
+  it("stone tile (index 1) has higher intra-tile luminance variance than 0.03 (boosted speckle)", () => {
+    // Pre-fix speckle was ±8% (stdDev ≈ 0.023); post-fix ±14% → stdDev ≈ 0.04+.
+    const stdDev = tileLuminanceStdDev(1);
+    expect(stdDev).toBeGreaterThan(0.03);
+  });
+
+  it("grass_top tile has materially higher variance than the pre-fix fallback threshold", () => {
+    // The old fallback was ±2% → stdDev ≈ 0.006. New grass pattern must be
+    // at least 3× that to be visually distinct.
+    const stdDev = tileLuminanceStdDev(3);
+    expect(stdDev).toBeGreaterThan(0.018); // 3× the old ≈ 0.006 floor
+  });
 });

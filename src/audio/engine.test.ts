@@ -12,6 +12,7 @@ import type {
   AudioBufferSourceNodeLike,
   BiquadFilterNodeLike,
   AudioBufferLike,
+  DynamicsCompressorNodeLike,
 } from "./engine";
 
 // ---------------------------------------------------------------------------
@@ -92,7 +93,7 @@ function mockOscillatorNode(edges: Edge[]): OscillatorNodeLike {
   const node: OscillatorNodeLike = {
     connect: vi.fn(),
     type: "sine" as OscillatorType,
-    frequency: { value: 440 },
+    frequency: { value: 440, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), setValueCurveAtTime: vi.fn() },
     start: vi.fn(),
     stop: vi.fn(),
   };
@@ -123,6 +124,19 @@ function mockBiquadFilter(edges: Edge[]): BiquadFilterNodeLike {
   return node;
 }
 
+function mockDynamicsCompressor(edges: Edge[]): DynamicsCompressorNodeLike {
+  const node: DynamicsCompressorNodeLike = {
+    connect: vi.fn(),
+    threshold: { value: 0 },
+    knee: { value: 0 },
+    ratio: { value: 1 },
+    attack: { value: 0 },
+    release: { value: 0 },
+  };
+  node.connect = makeConnectFn(node, edges) as DynamicsCompressorNodeLike["connect"];
+  return node;
+}
+
 function mockAudioBuffer(sr: number, length: number): AudioBufferLike {
   const data = new Float32Array(length);
   return {
@@ -142,6 +156,7 @@ interface MockCtx extends AudioContextLike {
   _oscillators: OscillatorNodeLike[];
   _bufferSources: AudioBufferSourceNodeLike[];
   _filters: BiquadFilterNodeLike[];
+  _compressors: DynamicsCompressorNodeLike[];
   _edges: Edge[];
   resumeCalled: number;
 }
@@ -154,6 +169,7 @@ function makeMockCtx(state: AudioContextState = "suspended"): MockCtx {
   const _oscillators: OscillatorNodeLike[] = [];
   const _bufferSources: AudioBufferSourceNodeLike[] = [];
   const _filters: BiquadFilterNodeLike[] = [];
+  const _compressors: DynamicsCompressorNodeLike[] = [];
   let resumeCalled = 0;
 
   const ctx: MockCtx = {
@@ -187,6 +203,11 @@ function makeMockCtx(state: AudioContextState = "suspended"): MockCtx {
       _filters.push(n);
       return n;
     }),
+    createDynamicsCompressor: vi.fn().mockImplementation(() => {
+      const n = mockDynamicsCompressor(edges);
+      _compressors.push(n);
+      return n;
+    }),
     createBuffer: vi.fn().mockImplementation(
       (_ch: number, length: number, sr: number) => mockAudioBuffer(sr, length),
     ),
@@ -194,6 +215,7 @@ function makeMockCtx(state: AudioContextState = "suspended"): MockCtx {
     _oscillators,
     _bufferSources,
     _filters,
+    _compressors,
     _edges: edges,
     get resumeCalled() {
       return resumeCalled;
@@ -207,20 +229,71 @@ function makeMockCtx(state: AudioContextState = "suspended"): MockCtx {
 // ---------------------------------------------------------------------------
 
 describe("AudioEngine construction", () => {
-  it("creates master / sfx / ambient gain nodes and wires them to destination", () => {
+  it("creates master / sfx / ambient gain nodes and wires them through limiter to destination", () => {
     const ctx = makeMockCtx();
     new AudioEngine(() => ctx);
 
     // Exactly 3 gain nodes: master, sfx, ambient.
     expect(ctx._gainNodes.length).toBe(3);
 
-    // sfxGain and ambientGain connect to masterGain; masterGain connects to destination.
-    // Each gain node's connect should have been called at least once.
-    const totalConnects = ctx._gainNodes.reduce(
-      (sum, n) => sum + (n.connect as ReturnType<typeof vi.fn>).mock.calls.length,
-      0,
+    // One DynamicsCompressorNode (the brick-wall limiter) must be created.
+    expect(ctx._compressors.length).toBe(1);
+
+    // sfxGain and ambientGain connect to masterGain;
+    // masterGain connects to limiter; limiter connects to destination.
+    // Verify full reachability: sfxGain → destination via the edge graph.
+    const sfxGain = ctx._gainNodes[1]!;
+    const destination = ctx.destination;
+    expect(
+      isReachable(sfxGain, destination, ctx._edges),
+      "sfxGain must reach destination through limiter",
+    ).toBe(true);
+  });
+
+  it("masterGain has 0.7 headroom (not 1.0) to prevent clipping before limiter", () => {
+    const ctx = makeMockCtx();
+    new AudioEngine(() => ctx);
+    // masterGain is the first gain node created in the constructor.
+    const masterGain = ctx._gainNodes[0];
+    expect(masterGain?.gain.value).toBe(0.7);
+  });
+
+  it("limiter is inserted between masterGain and destination", () => {
+    const ctx = makeMockCtx();
+    new AudioEngine(() => ctx);
+
+    const masterGain = ctx._gainNodes[0]!;
+    const limiter = ctx._compressors[0]!;
+    const destination = ctx.destination;
+
+    // masterGain must reach limiter directly.
+    expect(
+      isReachable(masterGain, limiter, ctx._edges),
+      "masterGain must connect to limiter",
+    ).toBe(true);
+
+    // limiter must reach destination directly.
+    expect(
+      isReachable(limiter, destination, ctx._edges),
+      "limiter must connect to destination",
+    ).toBe(true);
+
+    // masterGain must NOT connect directly to destination (limiter is in between).
+    const masterToDestDirect = ctx._edges.some(
+      (e) => e.from === masterGain && e.to === destination,
     );
-    expect(totalConnects).toBeGreaterThanOrEqual(3);
+    expect(masterToDestDirect).toBe(false);
+  });
+
+  it("limiter has correct brick-wall parameters", () => {
+    const ctx = makeMockCtx();
+    new AudioEngine(() => ctx);
+    const limiter = ctx._compressors[0]!;
+    expect(limiter.threshold.value).toBe(-6);
+    expect(limiter.knee.value).toBe(0);
+    expect(limiter.ratio.value).toBe(20);
+    expect(limiter.attack.value).toBe(0.003);
+    expect(limiter.release.value).toBe(0.1);
   });
 
   it("is safe when factory throws (headless/Node environment)", () => {
@@ -392,7 +465,7 @@ describe("AudioEngine.playSfx", () => {
 });
 
 describe("AudioEngine signal-path connectivity (graph reachability)", () => {
-  it("source → [filter →] envGain → panGain → sfxGain → masterGain → destination for filtered sound (break_stone)", () => {
+  it("source → [filter →] envGain → panGain → sfxGain → masterGain → limiter → destination for filtered sound (break_stone)", () => {
     // break_stone: kind="noise", filterHz=800 — exercises the BiquadFilter path.
     const ctx = makeMockCtx();
     const engine = new AudioEngine(() => ctx);
@@ -427,7 +500,7 @@ describe("AudioEngine signal-path connectivity (graph reachability)", () => {
     }
   });
 
-  it("source → envGain → panGain → sfxGain → masterGain → destination for unfiltered tone (mob_cow)", () => {
+  it("source → envGain → panGain → sfxGain → masterGain → limiter → destination for unfiltered tone (mob_cow)", () => {
     // mob_cow: kind="tone", no filterHz — exercises the no-filter path.
     const ctx = makeMockCtx();
     const engine = new AudioEngine(() => ctx);

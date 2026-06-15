@@ -3,9 +3,13 @@
  *
  * Uses NullEngine (no real WebGL) to exercise initPostFX under a headless
  * Babylon environment. The NullEngine supports enough of the scene graph that
- * DefaultRenderingPipeline and SSAO2 construction can be attempted (both may
- * silently fall back to null in headless; the tests verify graceful degradation
- * as well as the happy-path values when construction succeeds).
+ * DefaultRenderingPipeline construction can be attempted (it may silently fall
+ * back to null in headless; the tests verify graceful degradation as well as
+ * the happy-path values when construction succeeds).
+ *
+ * SSAO is intentionally absent — the GeometryBufferRenderer ReadPixels stall
+ * caused region-only rendering and was disabled. Tests assert SSAO methods are
+ * no-ops (no throw) but do NOT assert that an SSAO pipeline was constructed.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -240,6 +244,52 @@ describe("PostFXController interface (mock)", () => {
     expect(ctrl.calls["setSSAOIntensity"]).toEqual([[0.4]]);
     expect(ctrl.calls["setFilmGrainIntensity"]).toEqual([[2]]);
     expect(ctrl.calls["dispose"]).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SSAO — intentionally disabled; assert no-op behavior and no side effects
+// ---------------------------------------------------------------------------
+
+describe("initPostFX SSAO (intentionally disabled)", () => {
+  it("SSAO methods are no-ops and never throw", () => {
+    // SSAO is disabled to prevent the GeometryBufferRenderer ReadPixels stall.
+    // The methods must still exist on the controller (interface compliance) but
+    // they are silent no-ops.
+    const ctrl = initPostFX(scene, camera);
+    expect(() => { ctrl.setSSAOEnabled(true); }).not.toThrow();
+    expect(() => { ctrl.setSSAOEnabled(false); }).not.toThrow();
+    expect(() => { ctrl.setSSAOIntensity(0.15); }).not.toThrow();
+    expect(() => { ctrl.dispose(); }).not.toThrow();
+  });
+
+  it("GeometryBufferRenderer is NOT activated (no geometry-buffer stall)", () => {
+    // initPostFX must not call scene.enableGeometryBufferRenderer — if it did,
+    // the GeometryBufferRenderer would be enabled and cause per-frame ReadPixels
+    // stalls. Check that the scene has no active geometry buffer renderer after
+    // initPostFX is called (NullEngine exposes geometryBufferRenderer as null
+    // when not activated).
+    initPostFX(scene, camera);
+    // NullEngine: geometryBufferRenderer is null when not activated.
+    // The property may not exist on scene in all Babylon versions; guard the check.
+    const gbr = (scene as unknown as Record<string, unknown>)["geometryBufferRenderer"];
+    expect(gbr).toBeFalsy();
+  });
+
+  it("does not emit any console.warn about SSAO when constructing normally", () => {
+    const warnMessages: string[] = [];
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation((msg: string) => {
+      warnMessages.push(String(msg));
+    });
+
+    initPostFX(scene, camera);
+
+    // No SSAO-related warn should appear (it was deliberately removed, not
+    // failing silently).
+    const ssaoWarn = warnMessages.some((m) => m.toLowerCase().includes("ssao"));
+    expect(ssaoWarn).toBe(false);
+
+    warnSpy.mockRestore();
   });
 });
 

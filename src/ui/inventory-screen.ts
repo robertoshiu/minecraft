@@ -28,6 +28,7 @@ import {
   HAND_GRID_CELLS,
   craftOnce,
 } from "./crafting-model";
+import { getAtlasIconStyle } from "./item-icon";
 
 /** Whether the DOM is available (false under node / unit tests). */
 function hasDom(): boolean {
@@ -59,12 +60,41 @@ function styleSlot(el: HTMLElement): void {
 /** Render a stack (or null) into a slot element via the pure view-model. */
 function fillSlot(el: HTMLElement, stack: ItemStack | null): void {
   const v = slotView(stack);
-  el.textContent = v.empty ? "" : `${v.label} ${v.count}`;
   el.title = v.name;
   el.setAttribute(
     "aria-label",
     v.empty ? "Empty slot" : `${v.name}, ${v.count} items`,
   );
+
+  // Clear previous icon state before re-rendering.
+  el.style.backgroundImage = "";
+  el.style.backgroundSize = "";
+  el.style.backgroundPosition = "";
+  el.style.imageRendering = "";
+
+  if (v.empty) {
+    el.textContent = "";
+    return;
+  }
+
+  // Try to show the atlas block icon as a CSS background.
+  const iconStyle = getAtlasIconStyle(stack!.itemId);
+  if (iconStyle !== null) {
+    el.textContent = ""; // clear text; count goes in a child span
+    el.style.backgroundImage = iconStyle.backgroundImage;
+    el.style.backgroundSize = iconStyle.backgroundSize;
+    el.style.backgroundPosition = iconStyle.backgroundPosition;
+    el.style.imageRendering = iconStyle.imageRendering;
+    el.style.position = "relative";
+
+    const countSpan = document.createElement("span");
+    countSpan.className = "slot-count";
+    countSpan.textContent = String(v.count);
+    el.appendChild(countSpan);
+  } else {
+    // Fallback: text label (non-block items, headless env, canvas unavailable).
+    el.textContent = `${v.label} ${String(v.count)}`;
+  }
 }
 
 /**

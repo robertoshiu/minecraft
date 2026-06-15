@@ -83,12 +83,28 @@ function borderIndex(dir: FaceDir, x: number, y: number, z: number): number {
   }
 }
 
+/**
+ * Baked per-face directional brightness following Minecraft canonical values.
+ * top (+Y) = 1.0, bottom (-Y) = 0.5, north/south (±Z) = 0.8, east/west (±X) = 0.6.
+ */
+function faceShadeForDir(dir: FaceDir): number {
+  switch (dir) {
+    case "py": return 1.0;
+    case "ny": return 0.5;
+    case "pz":
+    case "nz": return 0.8;
+    case "px":
+    case "nx": return 0.6;
+  }
+}
+
 /** Accumulates vertices/indices for one render group, flushed to a MeshData. */
 class MeshBuilder {
   private readonly positions: number[] = [];
   private readonly normals: number[] = [];
   private readonly uvs: number[] = [];
   private readonly tileIndices: number[] = [];
+  private readonly faceShades: number[] = [];
   private readonly indices: number[] = [];
   private vertexCount = 0;
 
@@ -96,7 +112,8 @@ class MeshBuilder {
    * Append a single quad. `verts` is the four corners in CCW-from-outside order,
    * each paired with its merged-quad uv (0..width, 0..height) so the atlas
    * shader tiles via `fract()`. `normal` is the outward unit normal; `tile` the
-   * atlas tile index. Triangulated (0,1,2)+(0,2,3), preserving the CCW winding.
+   * atlas tile index; `shade` is the baked per-face directional brightness.
+   * Triangulated (0,1,2)+(0,2,3), preserving the CCW winding.
    */
   addQuad(
     verts: readonly {
@@ -105,6 +122,7 @@ class MeshBuilder {
     }[],
     normal: readonly [number, number, number],
     tile: number,
+    shade: number,
   ): void {
     const base = this.vertexCount;
     for (let i = 0; i < 4; i++) {
@@ -114,6 +132,7 @@ class MeshBuilder {
       this.normals.push(normal[0], normal[1], normal[2]);
       this.uvs.push(vert.uv[0], vert.uv[1]);
       this.tileIndices.push(tile);
+      this.faceShades.push(shade);
     }
     this.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     this.vertexCount += 4;
@@ -126,6 +145,7 @@ class MeshBuilder {
       normals: new Float32Array(this.normals),
       uvs: new Float32Array(this.uvs),
       tileIndices: new Float32Array(this.tileIndices),
+      faceShades: new Float32Array(this.faceShades),
       indices: new Uint32Array(this.indices),
     };
   }
@@ -305,8 +325,12 @@ function emitQuad(
   // Reversal keeps each corner paired with its UV.
   const verts = spec.reverse ? [v0, v3, v2, v1] : [v0, v1, v2, v3];
 
+  // Baked per-face directional brightness: constant across all 4 vertices of
+  // this quad so greedy merging is entirely unaffected.
+  const shade = faceShadeForDir(spec.dir);
+
   const builder = cell.group === "opaque" ? opaque : transparent;
-  builder.addQuad(verts, spec.normal, cell.tile);
+  builder.addQuad(verts, spec.normal, cell.tile, shade);
 }
 
 /**

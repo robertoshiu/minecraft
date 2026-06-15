@@ -30,6 +30,12 @@ export interface MeshData {
   uvs: Float32Array;
   /** 1 float per vertex — atlas tile index (0..255). */
   tileIndices: Float32Array;
+  /**
+   * 1 float per vertex — baked per-face directional brightness (Minecraft
+   * canonical values): top +Y = 1.0, bottom -Y = 0.5, ±Z = 0.8, ±X = 0.6.
+   * Constant across the four verts of each quad; greedy merging is unaffected.
+   */
+  faceShades: Float32Array;
   /** 3 indices per triangle, CCW front faces. */
   indices: Uint32Array;
 }
@@ -55,6 +61,7 @@ export function emptyMeshData(): MeshData {
     normals: new Float32Array(0),
     uvs: new Float32Array(0),
     tileIndices: new Float32Array(0),
+    faceShades: new Float32Array(0),
     indices: new Uint32Array(0),
   };
 }

@@ -28,7 +28,7 @@ import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascaded
 // when using Babylon's deep ES module imports.
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 
-import { installTestApi } from "./test-api";
+import { installTestApi, type RenderDiagSnapshot } from "./test-api";
 import { World } from "./world/world";
 import { WorldRenderer, createTerrainMaterials } from "./rendering/world-renderer";
 import { Player, type InputState } from "./player/controller";
@@ -112,7 +112,8 @@ scene.fogEnd = 130;
 
 // --- Camera: MOUSE-LOOK ONLY (no self-movement) --------------------------
 const camera = new UniversalCamera("camera", new Vector3(0, 110, 0), scene);
-camera.minZ = 0.1;
+// Small near plane so blocks pressed up against the camera still render their near faces.
+camera.minZ = 0.03;
 camera.maxZ = 1000;
 // Strip all keyboard movement — the Player body owns motion, not the camera.
 camera.keysUp = [];
@@ -123,6 +124,9 @@ camera.keysUpward = [];
 camera.keysDownward = [];
 camera.speed = 0;
 camera.inertia = 0;
+// Keyboard + mouse only — drop the gamepad input so Babylon never touches the
+// (headless-flaky) gamepad API, which can throw 'onGamepadConnectedObservable'.
+try { camera.inputs.removeByType("FreeCameraGamepadInput"); } catch { /* no gamepad input present */ }
 // Pointer-lock mouse-look attached to the canvas.
 camera.attachControl(canvas, true);
 
@@ -135,7 +139,10 @@ camera.attachControl(canvas, true);
 const hemiLight = new HemisphericLight("hemi", new Vector3(0, 1, 0), scene);
 hemiLight.intensity = 1.1;
 hemiLight.diffuse = new Color3(1.0, 0.98, 0.95);
-hemiLight.groundColor = new Color3(0.45, 0.46, 0.5);
+// FIX 4: trimmed from 0.45 → 0.34 to reduce the flat fill that washes out
+// per-face contrast. This lets faceShade brightness steps read clearly while
+// keeping the scene well within the bright "golden-hour" target.
+hemiLight.groundColor = new Color3(0.34, 0.35, 0.38);
 
 // Warm 5200K-ish key light. Intensity is scaled per-frame toward ~2.4 at noon.
 const sunLight = new DirectionalLight("sun", new Vector3(-0.6, -0.85, -0.4), scene);
@@ -145,7 +152,10 @@ sunLight.diffuse = new Color3(1.0, 0.94, 0.82);
 // Small scene-ambient floor so all faces have a legible brightness minimum.
 // StandardMaterial only applies scene.ambientColor when the material's own
 // ambientColor is non-black — terrain-material.ts sets ambientColor(1,1,1).
-scene.ambientColor = new Color3(0.25, 0.25, 0.28);
+// FIX 4: trimmed from 0.25 → 0.16 to allow per-face directional brightness
+// contrast (faceShade) to be visible rather than washed out by a high ambient
+// floor. The world remains clearly bright at daytime SUN_MAX_INTENSITY=2.4.
+scene.ambientColor = new Color3(0.16, 0.16, 0.18);
 
 // --- Cascaded Shadow Maps: 2 cascades, PCF MEDIUM quality -----------------
 // The CascadedShadowGenerator follows the sun automatically because applySky
@@ -501,6 +511,16 @@ function releasePointer(): void {
 }
 
 window.addEventListener("keydown", (e) => {
+  // F4 toggles the render-diagnostics overlay (debug aid; no gameplay effect).
+  if (e.code === "F4") {
+    e.preventDefault();
+    renderDiagVisible = !renderDiagVisible;
+    if (renderDiagEl !== null) {
+      renderDiagEl.textContent = renderDiagVisible ? renderDiagEl.textContent : "";
+    }
+    return;
+  }
+
   // Esc closes the topmost open screen, or toggles the pause menu.
   if (e.code === "Escape") {
     if (helpOverlay.isOpen()) {
@@ -618,7 +638,10 @@ function blockHitDistance(
 /** Cast from the eye along the camera forward; break or place on hit. */
 function handleClick(button: number): void {
   if (uiBlockingGameplay()) return;
-  if (!pointerLocked()) return;
+  if (!pointerLocked()) {
+    showToast("Click to lock the mouse — then Left-click to mine, Right-click to place. 1-9 selects the hotbar.");
+    return;
+  }
   const eye = player.eyePosition();
   const fwd = camera.getDirection(Vector3.Forward());
   const dir = { x: fwd.x, y: fwd.y, z: fwd.z };
@@ -715,6 +738,33 @@ canvas.addEventListener("mousedown", (e) => {
   handleClick(e.button);
 });
 
+// --- Render diagnostics overlay (F4 toggleable) ---------------------------
+// Reads material/texture readiness from live objects; zero rendering impact.
+const renderDiagEl = document.getElementById("render-diag");
+let renderDiagVisible = true;
+let renderDiagLastUpdate = 0;
+
+/** Sample and display render-diagnostics; called from the render loop ~2x/s. */
+function updateRenderDiag(nowMs: number): void {
+  if (renderDiagEl === null || !renderDiagVisible) return;
+  if (nowMs - renderDiagLastUpdate < 500) return;
+  renderDiagLastUpdate = nowMs;
+
+  const opaqueMeshCount = renderer.getMeshCount();
+  const opaqueMaterialReady = materials.opaque.isReady();
+  const transparentMaterialReady = materials.transparent.isReady();
+  // Retrieve the atlas texture from the opaque material's active texture list.
+  const activeTextures = materials.opaque.getActiveTextures();
+  const atlasTex = activeTextures.find((t) => t.name === "terrain-atlas") ?? null;
+  const atlasTextureReady = atlasTex !== null ? atlasTex.isReady() : false;
+
+  renderDiagEl.textContent =
+    `meshes:${opaqueMeshCount} ` +
+    `opq:${opaqueMaterialReady ? "ok" : "NO"} ` +
+    `trn:${transparentMaterialReady ? "ok" : "NO"} ` +
+    `atlas:${atlasTextureReady ? "ok" : "NO"}`;
+}
+
 // --- FPS element + ready promise ------------------------------------------
 const fpsEl = document.getElementById("fps");
 
@@ -793,6 +843,11 @@ engine.runRenderLoop(() => {
   const eye = player.eyePosition();
   camera.position.set(eye.x, eye.y, eye.z);
 
+  // Inside-block safeguard: if the eye penetrates terrain, render both faces so
+  // blocks still read as solid up close instead of culling to see-through.
+  const eyeInSolid = world.isSolidAt(Math.floor(eye.x), Math.floor(eye.y), Math.floor(eye.z));
+  materials.opaque.backFaceCulling = !eyeInSolid;
+
   // --- Audio: update listener position/yaw every frame ---------------------
   if (audioEngine !== null) {
     audioEngine.updateListener(eye, camera.rotation.y);
@@ -846,6 +901,7 @@ engine.runRenderLoop(() => {
   if (fpsEl) {
     fpsEl.textContent = `${engine.getFps().toFixed(0)} FPS`;
   }
+  updateRenderDiag(performance.now());
 });
 
 window.addEventListener("resize", () => {
@@ -942,6 +998,7 @@ const testApiBase = {
   state: () => ({
     meshCount: renderer.getMeshCount(),
     fps: engine.getFps(),
+    // Flat aliases kept for any callers that use the old shape.
     playerY: player.feet.y,
     health: player.health,
     food: player.survival.food,
@@ -949,7 +1006,26 @@ const testApiBase = {
     selectedSlot: player.hotbar.selected,
     day: dayNumber(clock),
     totalTicks: clock.totalTicks,
+    // Nested shapes expected by smoke tests.
+    player: {
+      position: { x: player.feet.x, y: player.feet.y, z: player.feet.z },
+    },
+    clock: {
+      tod: tickOfDay(clock),
+      totalTicks: clock.totalTicks,
+      day: dayNumber(clock),
+    },
   }),
+  renderDiag: (): RenderDiagSnapshot => {
+    const activeTextures = materials.opaque.getActiveTextures();
+    const atlasTex = activeTextures.find((t) => t.name === "terrain-atlas") ?? null;
+    return {
+      opaqueMeshCount: renderer.getMeshCount(),
+      opaqueMaterialReady: materials.opaque.isReady(),
+      transparentMaterialReady: materials.transparent.isReady(),
+      atlasTextureReady: atlasTex !== null ? atlasTex.isReady() : false,
+    };
+  },
   /**
    * Set the clock to the given tick-of-day within the current day.
    * The tod is clamped to [0, 23999] and the clock is updated so that

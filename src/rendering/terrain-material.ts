@@ -28,6 +28,7 @@ import type { UniformBuffer } from "@babylonjs/core/Materials/uniformBuffer";
 import type { MaterialDefines } from "@babylonjs/core/Materials/materialDefines";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { Material } from "@babylonjs/core/Materials/material";
+import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { MaterialPluginBase } from "@babylonjs/core/Materials/materialPluginBase";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
@@ -65,9 +66,10 @@ class AtlasMaterialPlugin extends MaterialPluginBase {
     return "AtlasMaterialPlugin";
   }
 
-  /** Register the custom "tileIndex" vertex attribute. */
+  /** Register the custom "tileIndex" and "faceShade" vertex attributes. */
   override getAttributes(attributes: string[], _scene: Scene, _mesh: AbstractMesh): void {
     attributes.push("tileIndex");
+    attributes.push("faceShade");
   }
 
   /** Register the atlas sampler so Babylon includes it in the effect. */
@@ -94,6 +96,24 @@ class AtlasMaterialPlugin extends MaterialPluginBase {
     _subMesh: SubMesh,
   ): boolean {
     return true;
+  }
+
+  /**
+   * Tell Babylon's material readiness system about the atlas texture so
+   * `material.getActiveTextures()` returns it and `textureCount` is > 0.
+   * Without this override, Babylon sees textureCount=0 and may keep the
+   * material in a "not ready" state.
+   */
+  override getActiveTextures(activeTextures: BaseTexture[]): void {
+    activeTextures.push(this._atlasTex);
+  }
+
+  /**
+   * Tell Babylon's texture-dependency tracker that the atlas is used by this
+   * plugin. Required for `material.hasTexture(tex)` to return true.
+   */
+  override hasTexture(texture: BaseTexture): boolean {
+    return texture === this._atlasTex;
   }
 
   /**
@@ -131,30 +151,33 @@ class AtlasMaterialPlugin extends MaterialPluginBase {
   ): { [pointName: string]: string } | null {
     if (shaderType === "vertex") {
       return {
-        // Declare attribute + varying before main().
+        // Declare attributes + varyings before main().
         CUSTOM_VERTEX_DEFINITIONS: `
 attribute float tileIndex;
 varying float vTileIndex;
 varying vec2 vAtlasUV;
+attribute float faceShade;
+varying float vFaceShade;
 `,
-        // At the end of main(), write the varying.
+        // At the end of main(), write the varyings.
         // `uv` is the raw attribute (vec2); the default shader exposes it as
         // `uvUpdated` inside main() after morph targets have been applied.
-        // We read vMainUV1 which equals uvUpdated set above in the shader.
         CUSTOM_VERTEX_MAIN_END: `
 vTileIndex = tileIndex;
 vAtlasUV = uvUpdated;
+vFaceShade = faceShade;
 `,
       };
     }
 
     if (shaderType === "fragment") {
       return {
-        // Declare varying + sampler before main().
+        // Declare varyings + sampler before main().
         CUSTOM_FRAGMENT_DEFINITIONS: `
 varying float vTileIndex;
 varying vec2 vAtlasUV;
 uniform sampler2D atlasSampler;
+varying float vFaceShade;
 `,
         // After baseColor has been written (either from diffuseSampler or as
         // the default white vec4), override it with the atlas sample.
@@ -164,15 +187,43 @@ uniform sampler2D atlasSampler;
         //
         // Atlas layout: 16 columns × 16 rows of 64px tiles in a 1024px atlas.
         // atlas UV = (vec2(tileCol, tileRow) + tileUV) / 16.0
+        //
+        // CHEAP HARDENING: snap tile index to nearest integer before col/row
+        // math to guard against sub-integer vTileIndex interpolation artifacts
+        // (WebGL1-safe; does not add a flat qualifier).
+        //
+        // FIX 1: multiply by vFaceShade for per-face directional brightness.
+        //   top=1.0, bottom=0.5, ±Z=0.8, ±X=0.6 (Minecraft canonical).
+        //
+        // FIX 2: per-block edge grooves using fract(vAtlasUV) (block-space
+        //   coords). smoothstep at border → ~20% darkening at each cube edge.
         CUSTOM_FRAGMENT_UPDATE_DIFFUSE: `
 {
-  float _tileIdx = vTileIndex;
+  float _tileIdx = floor(vTileIndex + 0.5);
   float _col = mod(_tileIdx, 16.0);
   float _row = floor(_tileIdx / 16.0);
   vec2 _tileUV = clamp(fract(vAtlasUV), 0.02, 0.98);
   vec2 _atlasUV = (vec2(_col, _row) + _tileUV) / 16.0;
   vec4 _atlasSample = texture2D(atlasSampler, _atlasUV);
   baseColor.rgb = _atlasSample.rgb;
+  // FIX 1: baked per-face directional brightness (top bright, bottom dark).
+  baseColor.rgb *= vFaceShade;
+  // FIX 2: per-block edge groove using the per-block UV from fract(vAtlasUV).
+  // _g is in [0,1) per block; _edge is distance to nearest block border;
+  // smoothstep produces 0 at border, 1 in interior.
+  vec2 _g = fract(vAtlasUV);
+  float _edge = min(min(_g.x, 1.0 - _g.x), min(_g.y, 1.0 - _g.y));
+  float _seam = smoothstep(0.0, 0.06, _edge);
+  baseColor.rgb *= mix(0.80, 1.0, _seam);
+  // --- Cube definition: soft edge AO band + crisp per-block outline ---
+  // _bd = distance (in block-UV units) to the nearest block border, 0 at edge.
+  float _bd = _edge;
+  // Soft AO: darken up to ~22% within a wide band near every block edge → depth.
+  float _ao = smoothstep(0.0, 0.32, _bd);
+  baseColor.rgb *= mix(0.78, 1.0, _ao);
+  // Crisp thin outline: a hard dark line right at the block border → visible grid.
+  float _outline = 1.0 - smoothstep(0.0, 0.03, _bd);
+  baseColor.rgb = mix(baseColor.rgb, baseColor.rgb * 0.5, _outline);
 }
 `,
       };
@@ -222,8 +273,16 @@ export function createTerrainMaterials(scene: Scene): TerrainMaterials {
   }
 
   // Build the atlas texture once, shared by both materials.
-  // NEAREST sampling (voxel aesthetic), generate mipmaps for correct
-  // appearance at distance.
+  // PRIMARY FIX: generateMipMaps=false + NEAREST_SAMPLINGMODE
+  //
+  // With generateMipMaps=true + NEAREST_NEAREST_MIPLINEAR, the GPU spikes
+  // the derivative at every per-block UV wrap boundary (fract() causes a
+  // discontinuity) and selects the coarsest mip, averaging neighbouring atlas
+  // cells (including any debug-colored regions) → muddy / patchy seams.
+  //
+  // Disabling mipmaps entirely (NEAREST_SAMPLINGMODE) keeps the crisp voxel
+  // look and removes the mip-averaging artifact. The atlas is 1024px with 64px
+  // tiles, so there is no aliasing concern at typical play distances.
   const atlasData = generateAtlasRGBA();
   const atlasTex = new RawTexture(
     atlasData,
@@ -232,19 +291,22 @@ export function createTerrainMaterials(scene: Scene): TerrainMaterials {
     // TEXTUREFORMAT_RGBA = 5
     5,
     scene,
-    /* generateMipMaps */ true,
+    /* generateMipMaps */ false,
     /* invertY */ false,
-    // Texture.NEAREST_NEAREST_MIPLINEAR = 8 — nearest in-tile, linear between
-    // mip levels for crisp voxels at a distance without aliasing.
-    Texture.NEAREST_NEAREST_MIPLINEAR,
+    // Texture.NEAREST_SAMPLINGMODE = 1 — point/nearest with no mip stage.
+    Texture.NEAREST_SAMPLINGMODE,
   );
   atlasTex.name = "terrain-atlas";
 
   // Opaque material: full backface culling.
+  // diffuseColor(1,1,1) ensures the constructor default is explicit — the
+  // StandardMaterial constructor leaves diffuseColor at white but relying on
+  // that implicit default is a latent footgun if the constructor ever changes.
   // ambientColor(1,1,1) opts this material into scene.ambientColor so the
   // global ambient floor (set in main.ts) provides a legible brightness minimum
   // on all faces without touching the atlas/plugin shader logic.
   const opaque = new StandardMaterial("terrain-opaque", scene);
+  opaque.diffuseColor = new Color3(1, 1, 1);
   opaque.specularColor = new Color3(0, 0, 0);
   opaque.ambientColor = new Color3(1, 1, 1);
   opaque.backFaceCulling = true;
@@ -252,6 +314,7 @@ export function createTerrainMaterials(scene: Scene): TerrainMaterials {
 
   // Transparent material: alpha pass, both faces rendered (water, glass, leaves).
   const transparent = new StandardMaterial("terrain-transparent", scene);
+  transparent.diffuseColor = new Color3(1, 1, 1);
   transparent.specularColor = new Color3(0, 0, 0);
   transparent.ambientColor = new Color3(1, 1, 1);
   transparent.alpha = TRANSPARENT_ALPHA;

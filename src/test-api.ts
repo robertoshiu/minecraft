@@ -35,6 +35,18 @@ export interface TrySleepResult {
   spawn: { x: number; y: number; z: number };
 }
 
+/** Render diagnostics snapshot exposed on window.__TEST__.renderDiag(). */
+export interface RenderDiagSnapshot {
+  /** Number of opaque chunk meshes currently in the scene. */
+  opaqueMeshCount: number;
+  /** Whether the opaque terrain material reports isReady(). */
+  opaqueMaterialReady: boolean;
+  /** Whether the transparent terrain material reports isReady(). */
+  transparentMaterialReady: boolean;
+  /** Whether the atlas texture reports isReady(). */
+  atlasTextureReady: boolean;
+}
+
 export interface TestApi {
   /** Resolves once the app has reached a testable "ready" state. */
   ready(): Promise<void>;
@@ -56,6 +68,12 @@ export interface TestApi {
   audio?: TestAudioApi;
   /** Effects sub-probe (present only when ParticleManager is available). */
   effects?: TestEffectsApi;
+  /**
+   * Render diagnostics: opaque mesh count, material ready flags, atlas texture
+   * ready flag. Use to verify the atlas pipeline on a real GPU without digging
+   * into Babylon internals manually.
+   */
+  renderDiag?: () => RenderDiagSnapshot;
 }
 
 declare global {

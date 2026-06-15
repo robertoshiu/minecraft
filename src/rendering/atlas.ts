@@ -77,6 +77,18 @@ const SPECKLE_TILES = new Set<number>([
   21, // gravel
 ]);
 
+/**
+ * Tile indices that receive a stronger dappled/clumpy grass-style pattern.
+ * Grass top and side tiles benefit from coarser variation so the ground reads
+ * as textured rather than a flat sheet of colour.
+ *
+ * Index 3 = grass_top, index 4 = grass_side (matching block-registry mapping).
+ */
+const GRASS_TILES = new Set<number>([
+  3,  // grass_top
+  4,  // grass_side
+]);
+
 /** Tile indices that should have wood-grain vertical streaks. */
 const WOOD_TILES = new Set<number>([
   7,  // oak_log_side
@@ -105,14 +117,30 @@ const MAX_USED_TILE = 35;
 
 /**
  * Compute the brightness modifier (in [-1, 1]) for a texel at (px, py)
- * within a tile of the given `index`. The modifier is scaled to ±8% so the
- * base color is always clearly visible.
+ * within a tile of the given `index`. The modifier is scaled so the base
+ * color remains clearly visible but surfaces read as textured, not flat.
  */
 function texelDetail(index: number, px: number, py: number): number {
   if (SPECKLE_TILES.has(index)) {
-    // Random per-texel speckle: ±8% brightness variation.
+    // Random per-texel speckle: ±12–14% brightness variation (raised from ±8%).
+    // Stronger speckle makes stone/dirt/ore visibly gritty.
     const n = hashF(index, px, py);
-    return (n - 0.5) * 0.16; // maps [0,1) → [-0.08, +0.08)
+    return (n - 0.5) * 0.28; // maps [0,1) → [-0.14, +0.14)
+  }
+
+  if (GRASS_TILES.has(index)) {
+    // Coarser dappled/clumpy pattern for grass (top and side faces).
+    // Two scales: 8×8 blobs for coarse colour variation, 2×2 for fine grain.
+    // This makes the ground read as textured rather than a uniform flat sheet.
+    const bx = (px >> 3) & 0xff;
+    const by = (py >> 3) & 0xff;
+    const blob = hashF(index, bx * 31 + by, 7);
+    const cx = (px >> 1) & 0xff;
+    const cy = (py >> 1) & 0xff;
+    const fine = hashF(index, cx * 17 + cy, 13);
+    const micro = hashF(index, px, py) * 0.03;
+    // Combine: 60% coarse blob + 35% fine grain + 5% micro noise, ±14% total.
+    return ((blob - 0.5) * 0.60 + (fine - 0.5) * 0.35) * 0.28 + micro;
   }
 
   if (WOOD_TILES.has(index)) {
@@ -134,17 +162,20 @@ function texelDetail(index: number, px: number, py: number): number {
     return (dapple - 0.5) * 0.14 + micro;
   }
 
-  // All other tiles (grass, water, snow, glass, lava, torch, glowstone, etc.)
-  // get a very subtle ±2% per-texel variation so they don't look completely flat.
-  return (hashF(index, px, py) - 0.5) * 0.04;
+  // All other tiles (water, snow, glass, lava, torch, glowstone, etc.)
+  // get ±6–8% per-texel variation (raised from ±2%) so they read as textured.
+  return (hashF(index, px, py) - 0.5) * 0.14; // maps [0,1) → [-0.07, +0.07)
 }
 
 // ---------------------------------------------------------------------------
 // Atlas generation
 // ---------------------------------------------------------------------------
 
-/** Debug magenta fill for unused tile slots (easy to spot if a wrong index appears). */
-const DEBUG_MAGENTA: RGB = [0.8, 0.2, 0.8];
+// Neutral mid-gray fill for unused tile slots. Previously magenta (0.8, 0.2,
+// 0.8) — replaced with gray so any residual edge bleed at mip boundaries or UV
+// seams is not garish. (DEFENSIVE: mipmap-off removes the root cause, but this
+// keeps stray samples invisible rather than alarming.)
+const UNUSED_TILE_FILL: RGB = [0.5, 0.5, 0.5];
 
 /**
  * Clamp a value into [0, 1].
@@ -171,9 +202,9 @@ export function generateAtlasRGBA(): Uint8Array {
     const cellX = col * TILE_PX;
     const cellY = row * TILE_PX;
 
-    // Base color: from the palette for known tiles, debug magenta otherwise.
+    // Base color: from the palette for known tiles, neutral gray otherwise.
     const base: RGB =
-      tileIdx <= MAX_USED_TILE ? tileColor(tileIdx) : [...DEBUG_MAGENTA];
+      tileIdx <= MAX_USED_TILE ? tileColor(tileIdx) : [...UNUSED_TILE_FILL];
 
     // Fill the inner region (no dilation border yet).
     for (let ly = 0; ly < TILE_PX; ly++) {

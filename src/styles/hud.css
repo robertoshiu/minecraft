@@ -96,6 +96,21 @@ body {
   transform: translateX(-50%);
 }
 
+/* ----------------------------------------------------------- render-diag */
+
+#render-diag {
+  position: absolute;
+  top: 36px;
+  right: 16px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: right;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 /* ------------------------------------------------------------------ hotbar */
 
 #hotbar {
@@ -280,4 +295,22 @@ body {
   white-space: nowrap;
   transform: translate(12px, 12px);
   display: none;
+}
+
+/* --------------------------------------------------------- slot item count */
+/* Stack count label rendered as an absolutely-positioned child span inside  */
+/* an inventory/hotbar slot that uses a CSS background for the block icon.   */
+
+.slot-count {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #e8e6e1);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
 }

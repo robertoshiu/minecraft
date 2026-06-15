@@ -33,7 +33,12 @@ export interface GainNodeLike extends AudioNodeLike {
 
 export interface OscillatorNodeLike extends AudioNodeLike {
   type: OscillatorType;
-  frequency: { value: number };
+  frequency: {
+    value: number;
+    setValueAtTime?(value: number, startTime: number): void;
+    linearRampToValueAtTime?(value: number, endTime: number): void;
+    setValueCurveAtTime?(values: Float32Array, startTime: number, duration: number): void;
+  };
   start(when?: number): void;
   stop(when?: number): void;
 }
@@ -58,6 +63,19 @@ export interface AudioBufferLike {
   getChannelData(channel: number): Float32Array;
 }
 
+/**
+ * A brick-wall limiter/compressor node. Each property has a `.value` field
+ * so both the real DynamicsCompressorNode and the test mock satisfy this
+ * interface without requiring a specific AudioContext implementation.
+ */
+export interface DynamicsCompressorNodeLike extends AudioNodeLike {
+  threshold: { value: number };
+  knee: { value: number };
+  ratio: { value: number };
+  attack: { value: number };
+  release: { value: number };
+}
+
 export interface AudioContextLike {
   readonly currentTime: number;
   readonly sampleRate: number;
@@ -69,6 +87,7 @@ export interface AudioContextLike {
   createBufferSource(): AudioBufferSourceNodeLike;
   createBiquadFilter(): BiquadFilterNodeLike;
   createBuffer(channels: number, length: number, sampleRate: number): AudioBufferLike;
+  createDynamicsCompressor(): DynamicsCompressorNodeLike;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,14 +121,20 @@ type VolumeCategory = "master" | "sfx" | "ambient";
  * Central audio system.
  *
  * Graph layout:
- *   [sfx nodes]     → sfxGain   → masterGain → destination
- *   [ambient nodes] → ambientGain → masterGain → destination
+ *   [sfx nodes]     → sfxGain   → masterGain → limiter → destination
+ *   [ambient nodes] → ambientGain → masterGain → limiter → destination
+ *
+ * The brick-wall limiter (DynamicsCompressorNode: threshold=-6 dBFS, ratio=20)
+ * prevents hard-clipping when multiple voices sum past ±1.0. masterGain is set
+ * to 0.7 headroom so a full-volume user preference still leaves 30% headroom
+ * before the limiter engages.
  */
 export class AudioEngine {
   private readonly ctx: AudioContextLike | null;
   private readonly masterGain: GainNodeLike | null;
   private readonly sfxGain: GainNodeLike | null;
   private readonly ambientGain: GainNodeLike | null;
+  private readonly limiter: DynamicsCompressorNodeLike | null;
 
   /** Stored listener position + yaw for spatial calculations. */
   private listenerPos: Vec3 = { x: 0, y: 0, z: 0 };
@@ -140,19 +165,37 @@ export class AudioEngine {
       this.sfxGain = this.ctx.createGain();
       this.ambientGain = this.ctx.createGain();
 
-      this.masterGain.gain.value = 1;
+      // FIX D: 0.7 headroom (instead of 1.0) so overlapping voices don't
+      // sum to hard-clip before the limiter engages.
+      this.masterGain.gain.value = 0.7;
       this.sfxGain.gain.value = 1;
       this.ambientGain.gain.value = 1;
 
+      // FIX D: brick-wall limiter inserted between masterGain and destination.
+      // threshold=-6 dBFS: starts limiting only in loud passages.
+      // knee=0: hard knee for brick-wall behavior.
+      // ratio=20: near-infinite gain reduction (limiter, not compressor).
+      // attack=0.003 s: fast enough to catch transients without pumping.
+      // release=0.1 s: short enough to not muddy sustained audio.
+      const limiter = this.ctx.createDynamicsCompressor();
+      limiter.threshold.value = -6;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.1;
+      this.limiter = limiter;
+
       this.sfxGain.connect(this.masterGain);
       this.ambientGain.connect(this.masterGain);
-      this.masterGain.connect(this.ctx.destination);
+      this.masterGain.connect(this.limiter);
+      this.limiter.connect(this.ctx.destination);
     } catch {
       // AudioContext unavailable (headless, Node, or browser policy).
       this.ctx = null;
       this.masterGain = null;
       this.sfxGain = null;
       this.ambientGain = null;
+      this.limiter = null;
     }
   }
 
@@ -348,20 +391,63 @@ export class AudioEngine {
     }
 
     // --- Build source nodes ------------------------------------------------
-    if (spec.kind === "noise" || spec.kind === "mixed") {
+    // FIX D (mixed kind): for sounds with both noise AND oscillator sources,
+    // each source goes through a small per-source gain of 0.5 before the shared
+    // envGain so two summed sources don't reach ~2× peak amplitude.
+    const isMixed = spec.kind === "mixed";
+
+    if (spec.kind === "noise" || isMixed) {
       const noiseSrc = this.buildNoiseSource(spec, finalPitch);
       if (noiseSrc !== null) {
-        noiseSrc.connect(filterOutput);
+        if (isMixed) {
+          // Route through a 0.5 per-source gain to halve the contribution.
+          const noiseGain = ctx.createGain();
+          noiseGain.gain.value = 0.5;
+          noiseSrc.connect(noiseGain);
+          noiseGain.connect(filterOutput);
+        } else {
+          noiseSrc.connect(filterOutput);
+        }
         noiseSrc.start(now);
         noiseSrc.stop(now + durationSec);
       }
     }
 
-    if (spec.kind === "tone" || spec.kind === "mixed") {
+    if (spec.kind === "tone" || isMixed) {
       const osc = ctx.createOscillator();
       osc.type = "sawtooth";
-      osc.frequency.value = (spec.freqHz ?? 440) * finalPitch;
-      osc.connect(filterOutput);
+      const baseFreq = (spec.freqHz ?? 440) * finalPitch;
+      const endFreq = (spec.freqEndHz ?? spec.freqHz ?? 440) * finalPitch;
+      if (
+        (spec.freqEndHz !== undefined || spec.vibratoHz !== undefined) &&
+        typeof osc.frequency.setValueCurveAtTime === "function"
+      ) {
+        // Build a pitch contour curve: linear glide from baseFreq to endFreq
+        // plus optional vibrato modulation.
+        const N = 64;
+        const curve = new Float32Array(N);
+        for (let i = 0; i < N; i++) {
+          const t = i / (N - 1); // 0..1 over duration
+          const glide = baseFreq + (endFreq - baseFreq) * t;
+          const vibrato =
+            (spec.vibratoDepth ?? 0) *
+            finalPitch *
+            Math.sin(2 * Math.PI * (spec.vibratoHz ?? 0) * t * durationSec);
+          curve[i] = Math.max(1, glide + vibrato);
+        }
+        osc.frequency.setValueCurveAtTime(curve, now, durationSec);
+      } else {
+        osc.frequency.value = baseFreq;
+      }
+      if (isMixed) {
+        // Route through a 0.5 per-source gain to halve the contribution.
+        const oscGain = ctx.createGain();
+        oscGain.gain.value = 0.5;
+        osc.connect(oscGain);
+        oscGain.connect(filterOutput);
+      } else {
+        osc.connect(filterOutput);
+      }
       osc.start(now);
       osc.stop(now + durationSec);
     }

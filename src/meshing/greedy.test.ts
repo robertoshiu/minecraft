@@ -189,4 +189,94 @@ describe("meshChunk — greedy mesher", () => {
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(50);
   });
+
+  // ── FIX 1: per-face baked shading ──────────────────────────────────────────
+
+  it("faceShades length equals positions.length / 3 (one shade per vertex)", () => {
+    const c = new Chunk();
+    c.set(8, 8, 8, Blocks.STONE);
+    const mesh = meshChunk(c);
+    const vertexCount = mesh.opaque.positions.length / 3;
+    expect(mesh.opaque.faceShades.length).toBe(vertexCount);
+  });
+
+  it("top face (+Y normal) carries faceShade = 1.0", () => {
+    const c = new Chunk();
+    c.set(8, 8, 8, Blocks.STONE);
+    const mesh = meshChunk(c);
+    const n = mesh.opaque.normals;
+    const s = mesh.opaque.faceShades;
+    for (let v = 0; v < mesh.opaque.positions.length / 3; v++) {
+      const ny = n[v * 3 + 1] ?? 0;
+      if (ny > 0.5) {
+        expect(s[v]).toBeCloseTo(1.0, 5);
+      }
+    }
+  });
+
+  it("bottom face (-Y normal) carries faceShade = 0.5", () => {
+    const c = new Chunk();
+    c.set(8, 8, 8, Blocks.STONE);
+    const mesh = meshChunk(c);
+    const n = mesh.opaque.normals;
+    const s = mesh.opaque.faceShades;
+    for (let v = 0; v < mesh.opaque.positions.length / 3; v++) {
+      const ny = n[v * 3 + 1] ?? 0;
+      if (ny < -0.5) {
+        expect(s[v]).toBeCloseTo(0.5, 5);
+      }
+    }
+  });
+
+  it("east/west face (±X normal) carries faceShade = 0.6", () => {
+    const c = new Chunk();
+    c.set(8, 8, 8, Blocks.STONE);
+    const mesh = meshChunk(c);
+    const n = mesh.opaque.normals;
+    const s = mesh.opaque.faceShades;
+    for (let v = 0; v < mesh.opaque.positions.length / 3; v++) {
+      const nx = n[v * 3 + 0] ?? 0;
+      if (Math.abs(nx) > 0.5) {
+        expect(s[v]).toBeCloseTo(0.6, 5);
+      }
+    }
+  });
+
+  it("north/south face (±Z normal) carries faceShade = 0.8", () => {
+    const c = new Chunk();
+    c.set(8, 8, 8, Blocks.STONE);
+    const mesh = meshChunk(c);
+    const n = mesh.opaque.normals;
+    const s = mesh.opaque.faceShades;
+    for (let v = 0; v < mesh.opaque.positions.length / 3; v++) {
+      const nz = n[v * 3 + 2] ?? 0;
+      if (Math.abs(nz) > 0.5) {
+        expect(s[v]).toBeCloseTo(0.8, 5);
+      }
+    }
+  });
+
+  it("all four vertices of a single merged top face carry the same faceShade", () => {
+    const c = new Chunk();
+    c.fill(Blocks.STONE);
+    const mesh = meshChunk(c);
+    // The fully-solid chunk produces 6 one-quad faces; each quad has 4 verts.
+    // All 4 verts of the +Y face must carry shade 1.0.
+    const n = mesh.opaque.normals;
+    const s = mesh.opaque.faceShades;
+    const topShades: number[] = [];
+    for (let v = 0; v < mesh.opaque.positions.length / 3; v++) {
+      const ny = n[v * 3 + 1] ?? 0;
+      if (ny > 0.5) topShades.push(s[v] ?? -1);
+    }
+    expect(topShades.length).toBe(4);
+    for (const shade of topShades) expect(shade).toBeCloseTo(1.0, 5);
+  });
+
+  it("empty chunk faceShades array has length 0", () => {
+    const c = new Chunk();
+    const mesh = meshChunk(c);
+    expect(mesh.opaque.faceShades.length).toBe(0);
+    expect(mesh.transparent.faceShades.length).toBe(0);
+  });
 });

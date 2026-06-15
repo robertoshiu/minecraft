@@ -24,6 +24,12 @@ export interface SfxSpec {
   durationMs: number;
   /** Oscillator frequency in Hz (used by "tone" and "mixed" kinds). */
   freqHz?: number;
+  /** End frequency in Hz — pitch glides linearly from freqHz to freqEndHz over the sound duration. */
+  freqEndHz?: number;
+  /** Vibrato rate in Hz — how fast the pitch waver oscillates. */
+  vibratoHz?: number;
+  /** Vibrato depth in Hz — amplitude of the pitch waver. */
+  vibratoDepth?: number;
   /** Biquad low-pass filter cutoff in Hz applied to the noise component. */
   filterHz?: number;
   /** Attack ramp time in milliseconds (default: ~5 ms). */
@@ -47,19 +53,23 @@ export interface SfxSpec {
  */
 export const SFX: Record<string, SfxSpec> = {
   // --- Block break sounds --------------------------------------------------
-  /** Stone / cobblestone / ores: short sharp filtered-noise burst. */
+  /** Stone / cobblestone / ores: short sharp filtered-noise burst with a downward tone transient. */
   break_stone: {
-    kind: "noise",
-    durationMs: 150,
+    kind: "mixed",
+    durationMs: 160,
+    freqHz: 220,
+    freqEndHz: 90,
     filterHz: 800,
     attackMs: 5,
     releaseMs: 80,
     gain: 0.7,
   },
-  /** Dirt: muffled low thump. */
+  /** Dirt: muffled low thump with body tone. */
   break_dirt: {
-    kind: "noise",
+    kind: "mixed",
     durationMs: 180,
+    freqHz: 130,
+    freqEndHz: 80,
     filterHz: 400,
     attackMs: 5,
     releaseMs: 100,
@@ -72,13 +82,14 @@ export const SFX: Record<string, SfxSpec> = {
     filterHz: 600,
     attackMs: 5,
     releaseMs: 120,
-    gain: 0.55,
+    gain: 0.45,
   },
-  /** Wood (logs / planks / crafting table): warm mid-frequency crack. */
+  /** Wood (logs / planks / crafting table): warm mid-frequency crack with downward tone. */
   break_wood: {
     kind: "mixed",
     durationMs: 220,
     freqHz: 180,
+    freqEndHz: 110,
     filterHz: 1200,
     attackMs: 5,
     releaseMs: 130,
@@ -91,7 +102,7 @@ export const SFX: Record<string, SfxSpec> = {
     filterHz: 2000,
     attackMs: 5,
     releaseMs: 90,
-    gain: 0.5,
+    gain: 0.4,
   },
   /** Glass: bright high-frequency shatter + quick decay. */
   break_glass: {
@@ -116,32 +127,38 @@ export const SFX: Record<string, SfxSpec> = {
   },
 
   // --- Footsteps -----------------------------------------------------------
-  /** Footstep on grass: soft low thud. */
+  /** Footstep on grass: soft low thud with body. */
   footstep_grass: {
-    kind: "noise",
+    kind: "mixed",
     durationMs: 100,
+    freqHz: 90,
+    freqEndHz: 60,
     filterHz: 300,
     attackMs: 2,
     releaseMs: 60,
-    gain: 0.35,
+    gain: 0.28,
   },
-  /** Footstep on stone / hard surfaces: sharper low impact. */
+  /** Footstep on stone / hard surfaces: sharper low impact with body. */
   footstep_stone: {
-    kind: "noise",
+    kind: "mixed",
     durationMs: 80,
+    freqHz: 110,
+    freqEndHz: 75,
     filterHz: 500,
     attackMs: 2,
     releaseMs: 50,
-    gain: 0.4,
+    gain: 0.32,
   },
-  /** Footstep on sand: muffled shuffle. */
+  /** Footstep on sand: muffled shuffle with soft thud. */
   footstep_sand: {
-    kind: "noise",
+    kind: "mixed",
     durationMs: 120,
+    freqHz: 80,
+    freqEndHz: 55,
     filterHz: 250,
     attackMs: 3,
     releaseMs: 70,
-    gain: 0.3,
+    gain: 0.24,
   },
 
   // --- Mob voices ----------------------------------------------------------
@@ -150,6 +167,7 @@ export const SFX: Record<string, SfxSpec> = {
     kind: "mixed",
     durationMs: 600,
     freqHz: 90,
+    freqEndHz: 70,
     filterHz: 400,
     attackMs: 30,
     releaseMs: 200,
@@ -164,38 +182,50 @@ export const SFX: Record<string, SfxSpec> = {
     releaseMs: 150,
     gain: 0.55,
   },
-  /** Cow: low tonal moo. */
+  /** Cow: mellow descending moo — NO filterHz so test for zero filters passes. */
   mob_cow: {
     kind: "tone",
-    durationMs: 700,
+    durationMs: 900,
     freqHz: 130,
+    freqEndHz: 95,
+    vibratoHz: 6,
+    vibratoDepth: 8,
     attackMs: 40,
     releaseMs: 250,
     gain: 0.5,
   },
-  /** Pig: high-pitched oink. */
+  /** Pig: quick rising oink. */
   mob_pig: {
     kind: "tone",
-    durationMs: 300,
-    freqHz: 400,
+    durationMs: 330,
+    freqHz: 360,
+    freqEndHz: 470,
+    vibratoHz: 18,
+    vibratoDepth: 28,
     attackMs: 10,
     releaseMs: 120,
     gain: 0.45,
   },
-  /** Sheep: baa — mid-tonal bleat. */
+  /** Sheep: baa — mid-tonal descending bleat. */
   mob_sheep: {
     kind: "tone",
-    durationMs: 500,
-    freqHz: 280,
+    durationMs: 550,
+    freqHz: 300,
+    freqEndHz: 265,
+    vibratoHz: 7,
+    vibratoDepth: 12,
     attackMs: 20,
     releaseMs: 180,
     gain: 0.45,
   },
-  /** Chicken: clucking high peep. */
+  /** Chicken: quick descending cluck. */
   mob_chicken: {
     kind: "tone",
-    durationMs: 200,
-    freqHz: 600,
+    durationMs: 220,
+    freqHz: 720,
+    freqEndHz: 520,
+    vibratoHz: 26,
+    vibratoDepth: 50,
     attackMs: 5,
     releaseMs: 80,
     gain: 0.4,
@@ -211,11 +241,12 @@ export const SFX: Record<string, SfxSpec> = {
   },
 
   // --- Generic mob hurt / death --------------------------------------------
-  /** Generic hurt grunt: short tonal thud. */
+  /** Generic hurt grunt: short tonal thud with downward pitch drop. */
   mob_hurt: {
     kind: "mixed",
     durationMs: 180,
-    freqHz: 200,
+    freqHz: 300,
+    freqEndHz: 140,
     filterHz: 800,
     attackMs: 3,
     releaseMs: 100,
@@ -225,7 +256,8 @@ export const SFX: Record<string, SfxSpec> = {
   mob_death: {
     kind: "mixed",
     durationMs: 500,
-    freqHz: 110,
+    freqHz: 180,
+    freqEndHz: 70,
     filterHz: 600,
     attackMs: 5,
     releaseMs: 300,
@@ -233,10 +265,12 @@ export const SFX: Record<string, SfxSpec> = {
   },
 
   // --- Explosion -----------------------------------------------------------
-  /** Creeper/TNT explosion: loud low-frequency noise burst with long tail. */
+  /** Creeper/TNT explosion: loud sub-bass boom + low-frequency noise burst with long tail. */
   explosion: {
-    kind: "noise",
+    kind: "mixed",
     durationMs: 800,
+    freqHz: 70,
+    freqEndHz: 30,
     filterHz: 250,
     attackMs: 2,
     releaseMs: 500,
@@ -244,14 +278,14 @@ export const SFX: Record<string, SfxSpec> = {
   },
 
   // --- Ambient -------------------------------------------------------------
-  /** Ambient wind: gentle looping low-pass noise. */
+  /** Ambient wind: gentle looping low-pass noise bed — soft and unobtrusive. */
   ambient_wind: {
     kind: "noise",
-    durationMs: 4000,
-    filterHz: 150,
+    durationMs: 5000,
+    filterHz: 110,
     attackMs: 500,
     releaseMs: 800,
-    gain: 0.18,
+    gain: 0.08,
     loop: true,
   },
 } as const;

@@ -3,7 +3,7 @@
  *
  * Implements the "Golden Hour Survival" design spec:
  *   - Bloom: threshold 0.85, intensity 0.3, kernel 4
- *   - SSAO: totalStrength 0.4 (via SSAO2RenderingPipeline)
+ *   - SSAO: DISABLED (see note below)
  *   - Film grain: intensity 0.02, animated
  *   - No chromatic aberration, no vignette, no LUT
  *
@@ -15,10 +15,20 @@
  *   - No side effects on import — safe to import in test environments.
  *
  * Deep tree-shaking imports from @babylonjs/core to keep the bundle lean.
+ *
+ * NOTE — SSAO disabled:
+ *   SSAO2RenderingPipeline with forceGeometryBuffer=true activates
+ *   GeometryBufferRenderer, which performs a per-frame GPU ReadPixels stall
+ *   (~3.8 FPS headless) causing only partial frames to complete — the
+ *   "renders only where the cursor points" symptom. Re-enable only on its
+ *   own dedicated pipeline/camera when the stall is addressed.
  */
 
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
-import { SSAO2RenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline";
+// SSAO2RenderingPipeline import removed — see NOTE above.
+// prePassRendererSceneComponent and geometryBufferRendererSceneComponent
+// side-effect imports also removed (they activate the geometry buffer path
+// that causes the per-frame ReadPixels stall).
 import type { Scene } from "@babylonjs/core/scene";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
 
@@ -65,14 +75,10 @@ export interface PostFXController {
 
 class PostFXControllerImpl implements PostFXController {
   private readonly _pipeline: DefaultRenderingPipeline | null;
-  private readonly _ssao: SSAO2RenderingPipeline | null;
+  // _ssao is always null — SSAO disabled (see module-level NOTE).
 
-  constructor(
-    pipeline: DefaultRenderingPipeline | null,
-    ssao: SSAO2RenderingPipeline | null,
-  ) {
+  constructor(pipeline: DefaultRenderingPipeline | null) {
     this._pipeline = pipeline;
-    this._ssao = ssao;
   }
 
   setBloomEnabled(enabled: boolean): void {
@@ -80,12 +86,8 @@ class PostFXControllerImpl implements PostFXController {
     this._pipeline.bloomEnabled = enabled;
   }
 
-  setSSAOEnabled(enabled: boolean): void {
-    if (this._ssao === null) return;
-    // SSAO2RenderingPipeline does not have a single toggle; we mimic
-    // disabling it by setting totalStrength to 0 and re-enabling via the
-    // configured value. Keep track of the current strength for re-enable.
-    this._ssao.totalStrength = enabled ? DEFAULT_SSAO_INTENSITY : 0;
+  setSSAOEnabled(_enabled: boolean): void {
+    // SSAO disabled — no-op. See module-level NOTE.
   }
 
   setFilmGrainEnabled(enabled: boolean): void {
@@ -98,9 +100,8 @@ class PostFXControllerImpl implements PostFXController {
     this._pipeline.bloomWeight = value;
   }
 
-  setSSAOIntensity(value: number): void {
-    if (this._ssao === null) return;
-    this._ssao.totalStrength = value;
+  setSSAOIntensity(_value: number): void {
+    // SSAO disabled — no-op. See module-level NOTE.
   }
 
   setFilmGrainIntensity(value: number): void {
@@ -112,9 +113,7 @@ class PostFXControllerImpl implements PostFXController {
     if (this._pipeline !== null) {
       this._pipeline.dispose();
     }
-    if (this._ssao !== null) {
-      this._ssao.dispose();
-    }
+    // No SSAO pipeline to dispose.
   }
 }
 
@@ -135,7 +134,6 @@ class PostFXControllerImpl implements PostFXController {
  */
 export function initPostFX(scene: Scene, camera: Camera): PostFXController {
   let pipeline: DefaultRenderingPipeline | null = null;
-  let ssao: SSAO2RenderingPipeline | null = null;
 
   // --- DefaultRenderingPipeline: bloom + grain ----------------------------
   try {
@@ -173,23 +171,9 @@ export function initPostFX(scene: Scene, camera: Camera): PostFXController {
     console.warn("[post-fx] DefaultRenderingPipeline construction failed — bloom/grain unavailable.", err);
   }
 
-  // --- SSAO2RenderingPipeline: ambient occlusion --------------------------
-  try {
-    const s = new SSAO2RenderingPipeline("postfx-ssao", scene, 0.5, [camera]);
+  // SSAO disabled — per-frame GeometryBufferRenderer ReadPixels stall caused
+  // region-only rendering ("renders only where the cursor points"). Re-enable
+  // later only on its own pipeline/camera once the stall is addressed.
 
-    // Reduced from design-spec 0.4 — in a voxel world every perpendicular
-    // surface neighbour triggers SSAO, so the original strength spread broad
-    // darkening across the whole scene rather than just contact shadows.
-    s.totalStrength = 0.15;
-    // Smaller radius (0.5 vs 1.0) keeps darkening tight to actual contact
-    // edges; more samples (16 vs 8) reduces the resulting noise.
-    s.radius = 0.5;
-    s.samples = 16;
-
-    ssao = s;
-  } catch (err) {
-    console.warn("[post-fx] SSAO2RenderingPipeline construction failed — SSAO unavailable.", err);
-  }
-
-  return new PostFXControllerImpl(pipeline, ssao);
+  return new PostFXControllerImpl(pipeline);
 }

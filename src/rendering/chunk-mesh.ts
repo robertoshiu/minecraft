@@ -132,6 +132,10 @@ export function buildBabylonMesh(
     // The AtlasMaterialPlugin reads this in the vertex shader and forwards
     // it to the fragment shader as a varying.
     mesh.setVerticesData("tileIndex", new Float32Array(data.tileIndices), false, 1);
+    // Set the baked per-face directional brightness attribute (1 float per
+    // vertex). The AtlasMaterialPlugin forwards it as vFaceShade to the
+    // fragment shader where it multiplies the atlas sample.
+    mesh.setVerticesData("faceShade", new Float32Array(data.faceShades), false, 1);
     mesh.useVertexColors = false;
   } else {
     // Display the per-vertex colors we just baked.

@@ -466,6 +466,7 @@ export class MobRenderer {
           { width: part.w, height: part.h, depth: part.d, faceUV },
           this.scene,
         );
+        box.doNotSyncBoundingInfo = true;
         box.parent = pivot;
         // Offset the box so its top aligns with the pivot (y=0 in pivot space).
         box.position.set(0, -part.h / 2, 0);
@@ -489,6 +490,7 @@ export class MobRenderer {
           { width: part.w, height: part.h, depth: part.d, faceUV },
           this.scene,
         );
+        box.doNotSyncBoundingInfo = true;
         box.parent = pivot;
         // Box center is offset so rotation pivots about the bottom of the head.
         box.position.set(0, part.h / 2, 0);
@@ -512,6 +514,7 @@ export class MobRenderer {
           { width: part.w, height: part.h, depth: part.d, faceUV },
           this.scene,
         );
+        box.doNotSyncBoundingInfo = true;
         box.parent = pivot;
         // Box center offset below the pivot so rotation swings about the attachment point.
         box.position.set(0, -part.h / 2, 0);
@@ -530,6 +533,7 @@ export class MobRenderer {
           { width: part.w, height: part.h, depth: part.d, faceUV },
           this.scene,
         );
+        box.doNotSyncBoundingInfo = true;
         box.parent = root;
         box.position.set(part.x, part.y, part.z);
         box.material = mat;

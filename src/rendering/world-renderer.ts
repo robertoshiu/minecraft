@@ -288,6 +288,19 @@ export class WorldRenderer implements RemeshNotifier {
     }
     return count;
   }
+
+  /**
+   * Return the first live opaque mesh found in the sections map, or null if
+   * none exist yet. Used by the readiness diagnostic to pass a real mesh to
+   * `material.isReady(mesh)` — PushMaterial always returns false when called
+   * with no mesh argument, giving a spurious "material not ready" diagnostic.
+   */
+  getFirstOpaqueMesh(): Mesh | null {
+    for (const { opaque } of this.sections.values()) {
+      if (opaque !== null) return opaque;
+    }
+    return null;
+  }
 }
 
 export { createTerrainMaterials };

@@ -208,3 +208,29 @@ describe("WorldRenderer shadow caster sink — leak-safe registration", () => {
     localEngine.dispose();
   });
 });
+
+describe("WorldRenderer.getFirstOpaqueMesh", () => {
+  it("returns null when no sections have been built", () => {
+    const localEngine = new NullEngine();
+    const localScene = new Scene(localEngine);
+    const world = new World(1337);
+    const renderer = new WorldRenderer(localScene, world, createTerrainMaterials(localScene));
+    expect(renderer.getFirstOpaqueMesh()).toBeNull();
+    localScene.dispose();
+    localEngine.dispose();
+  });
+
+  it("returns a Mesh after buildInitial populates opaque sections", () => {
+    const localEngine = new NullEngine();
+    const localScene = new Scene(localEngine);
+    const world = new World(1337);
+    const renderer = new WorldRenderer(localScene, world, createTerrainMaterials(localScene));
+    renderer.buildInitial(1);
+    const mesh = renderer.getFirstOpaqueMesh();
+    if (renderer.getMeshCount() > 0) {
+      expect(mesh).not.toBeNull();
+    }
+    localScene.dispose();
+    localEngine.dispose();
+  });
+});

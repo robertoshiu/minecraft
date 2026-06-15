@@ -27,6 +27,8 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import type { Mob } from "../mobs/entity";
 import type { MobType } from "../rules/mob-stats";
 import type { ShadowCasterSink } from "./world-renderer";
+import { TICKS_PER_SECOND } from "../rules/mc-1.20";
+import { legSwing, easeToRest, DEFAULT_GAIT } from "./mob-animation";
 
 // ---------------------------------------------------------------------------
 // Color constants
@@ -244,6 +246,8 @@ interface MobRecord {
   partMeshes: Mesh[];
   /** Leg pivot nodes, in part order; length equals the number of leg parts. */
   legPivots: TransformNode[];
+  /** Continuous wall-clock animation time in ticks (advanced by real deltaTime when nowMs is provided). */
+  visualClock: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +266,8 @@ export class MobRenderer {
   private readonly materials = new Map<string, StandardMaterial>();
   /** Optional shadow caster sink for CSM registration. */
   private shadowSink: ShadowCasterSink | null = null;
+  /** Last wall-clock timestamp passed to sync(); undefined until first live call. */
+  private lastNowMs: number | undefined = undefined;
 
   constructor(scene: Scene, shadowSink?: ShadowCasterSink) {
     this.scene = scene;
@@ -357,7 +363,16 @@ export class MobRenderer {
    *  - Animate leg pivots.
    *  - Dispose any record whose mob id is gone (removing from shadow sink first).
    */
-  sync(mobs: Mob[]): void {
+  sync(mobs: Mob[], nowMs?: number, currentTick?: number): void {
+    void currentTick;
+
+    let dtTicks = 0;
+    if (nowMs !== undefined) {
+      const prev = this.lastNowMs ?? nowMs;
+      dtTicks = ((nowMs - prev) / 1000) * TICKS_PER_SECOND;
+      this.lastNowMs = nowMs;
+    }
+
     const seen = new Set<number>();
 
     for (const mob of mobs) {
@@ -369,7 +384,7 @@ export class MobRenderer {
         // Create the root TransformNode for this mob.
         const root = new TransformNode(`mob_${mob.id}`, this.scene);
         const { partMeshes, legPivots } = this.buildModel(mob, root);
-        record = { root, partMeshes, legPivots };
+        record = { root, partMeshes, legPivots, visualClock: 0 };
         this.records.set(mob.id, record);
       }
 
@@ -377,18 +392,22 @@ export class MobRenderer {
       record.root.position.set(mob.feet.x, mob.feet.y, mob.feet.z);
       record.root.rotation.y = mob.yaw;
 
-      // Animate legs.
+      // Continuous animation clock: advance by real delta when available, else
+      // fall back to the tick-quantized mob.age (test path → identical to before).
+      record.visualClock += dtTicks;
+      const t = nowMs !== undefined ? record.visualClock : mob.age;
+
       const speed = Math.hypot(mob.velocity.x, mob.velocity.z);
       if (speed > 0.02) {
         record.legPivots.forEach((pivot, idx) => {
           // Alternate phase: even-indexed legs swing forward, odd swing backward.
           const phase = idx % 2 === 0 ? 0 : Math.PI;
-          pivot.rotation.x = Math.sin(mob.age * 0.3 + phase) * 0.5;
+          pivot.rotation.x = legSwing(t, phase, DEFAULT_GAIT);
         });
       } else {
         // Ease legs back to rest position.
         for (const pivot of record.legPivots) {
-          pivot.rotation.x *= 0.8;
+          pivot.rotation.x = easeToRest(pivot.rotation.x);
         }
       }
     }

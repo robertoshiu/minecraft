@@ -963,7 +963,7 @@ engine.runRenderLoop(() => {
   applySky({ scene, sun: sunLight, hemi: hemiLight }, clock);
 
   // Reconcile mob boxes with the live mob set (mobs move; no frozen matrices).
-  mobRenderer.sync(mobDriver.manager.all());
+  mobRenderer.sync(mobDriver.manager.all(), performance.now(), clock.totalTicks);
 
   scene.render();
 

@@ -36,6 +36,7 @@ import { TICKS_PER_SECOND } from "../rules/mc-1.20";
 import {
   legSwing, easeToRest, idleBob, tailSway, headPitch,
   DEFAULT_GAIT, type GaitParams, tintFor, recentlyDamaged,
+  deathGrace, deathScale,
 } from "./mob-animation";
 
 // ---------------------------------------------------------------------------
@@ -297,6 +298,8 @@ export class MobRenderer {
   private lastNowMs: number | undefined = undefined;
   /** Single shared red-flash material, created on first flash. Never per-instance. */
   private flashMat: StandardMaterial | null = null;
+  /** Records mid death-grace tween (live path only), keyed by mob id. */
+  private readonly dyingRecords = new Map<number, { record: MobRecord; startMs: number }>();
 
   constructor(scene: Scene, shadowSink?: ShadowCasterSink) {
     this.scene = scene;
@@ -542,6 +545,16 @@ export class MobRenderer {
     return { partMeshes, baseMaterials, legPivots, headPivot, swayPivots };
   }
 
+  // ---- Disposal helpers -----------------------------------------------------
+
+  /** Remove a record's meshes from the shadow sink, then dispose its root subtree. */
+  private disposeRecord(record: MobRecord): void {
+    for (const mesh of record.partMeshes) {
+      this.shadowSink?.removeShadowCaster(mesh);
+    }
+    record.root.dispose(false, true);
+  }
+
   // ---- sync -----------------------------------------------------------------
 
   /**
@@ -635,16 +648,27 @@ export class MobRenderer {
     // Despawn: remove mobs that are no longer present.
     for (const [id, record] of this.records) {
       if (seen.has(id)) continue;
-
-      // Remove every part mesh from the shadow sink BEFORE disposing.
-      for (const mesh of record.partMeshes) {
-        this.shadowSink?.removeShadowCaster(mesh);
+      if (nowMs === undefined) {
+        // TEST PATH: dispose immediately, exactly as before.
+        this.disposeRecord(record);
+      } else {
+        // LIVE PATH: start a death-grace tween; dispose when it expires.
+        this.dyingRecords.set(id, { record, startMs: nowMs });
       }
-
-      // Dispose root with all children (disposeChildren=true, doNotRecurse=false).
-      record.root.dispose(false, true);
-
       this.records.delete(id);
+    }
+
+    // Advance in-flight death-grace tweens (live path only).
+    if (nowMs !== undefined) {
+      for (const [id, dying] of this.dyingRecords) {
+        const { progress, expired } = deathGrace(nowMs - dying.startMs);
+        if (expired) {
+          this.disposeRecord(dying.record);
+          this.dyingRecords.delete(id);
+        } else {
+          dying.record.root.scaling.setAll(deathScale(progress));
+        }
+      }
     }
   }
 
@@ -664,13 +688,10 @@ export class MobRenderer {
    * (and their children), then clear the material cache.
    */
   dispose(): void {
-    for (const record of this.records.values()) {
-      for (const mesh of record.partMeshes) {
-        this.shadowSink?.removeShadowCaster(mesh);
-      }
-      record.root.dispose(false, true);
-    }
+    for (const record of this.records.values()) this.disposeRecord(record);
     this.records.clear();
+    for (const { record } of this.dyingRecords.values()) this.disposeRecord(record);
+    this.dyingRecords.clear();
 
     for (const mat of this.materials.values()) mat.dispose();
     this.materials.clear();

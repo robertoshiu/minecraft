@@ -138,24 +138,22 @@ camera.attachControl(canvas, true);
 // neutral mid-value prevents side faces from going near-black at midday.
 const hemiLight = new HemisphericLight("hemi", new Vector3(0, 1, 0), scene);
 hemiLight.intensity = 1.1;
-hemiLight.diffuse = new Color3(1.0, 0.98, 0.95);
-// FIX 4: trimmed from 0.45 → 0.34 to reduce the flat fill that washes out
-// per-face contrast. This lets faceShade brightness steps read clearly while
-// keeping the scene well within the bright "golden-hour" target.
-hemiLight.groundColor = new Color3(0.34, 0.35, 0.38);
+// Cool-sky fill (~7500K): slightly blue-white for sky-lit (top) faces.
+hemiLight.diffuse = new Color3(0.88, 0.93, 1.0);
+// Warm ground bounce: amber-tinged fill for downward/side normals.
+hemiLight.groundColor = new Color3(0.42, 0.36, 0.28);
 
 // Warm 5200K-ish key light. Intensity is scaled per-frame toward ~2.4 at noon.
 const sunLight = new DirectionalLight("sun", new Vector3(-0.6, -0.85, -0.4), scene);
 sunLight.intensity = 2.4;
-sunLight.diffuse = new Color3(1.0, 0.94, 0.82);
+// Warm amber-gold (~5200K) key for the golden-hour intent.
+sunLight.diffuse = new Color3(1.0, 0.88, 0.70);
 
 // Small scene-ambient floor so all faces have a legible brightness minimum.
 // StandardMaterial only applies scene.ambientColor when the material's own
 // ambientColor is non-black — terrain-material.ts sets ambientColor(1,1,1).
-// FIX 4: trimmed from 0.25 → 0.16 to allow per-face directional brightness
-// contrast (faceShade) to be visible rather than washed out by a high ambient
-// floor. The world remains clearly bright at daytime SUN_MAX_INTENSITY=2.4.
-scene.ambientColor = new Color3(0.16, 0.16, 0.18);
+// Warm ambient floor; kept low to preserve per-face directional contrast.
+scene.ambientColor = new Color3(0.16, 0.14, 0.11);
 
 // --- Cascaded Shadow Maps: 2 cascades, PCF MEDIUM quality -----------------
 // The CascadedShadowGenerator follows the sun automatically because applySky

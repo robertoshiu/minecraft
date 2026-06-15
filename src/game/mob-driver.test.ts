@@ -12,8 +12,10 @@ import {
   MobDriver,
   pickMob,
   attackMob,
+  attackDamageFor,
   PLAYER_ATTACK_DAMAGE,
 } from "./mob-driver";
+import { getItemDef, Items } from "../rules/items";
 
 /** A renderer stub that records every blockChanged call. */
 class RecordingRenderer implements RemeshNotifier {
@@ -207,6 +209,33 @@ describe("attackMob", () => {
 
     expect(mob.health).toBe(full - PLAYER_ATTACK_DAMAGE);
     expect(mob.lastDamageTick).toBe(1234);
+  });
+});
+
+describe("attackDamageFor", () => {
+  it("fists / null held → PLAYER_ATTACK_DAMAGE", () => {
+    expect(attackDamageFor(null)).toBe(PLAYER_ATTACK_DAMAGE);
+  });
+  it("non-sword tool (pickaxe) → PLAYER_ATTACK_DAMAGE", () => {
+    expect(attackDamageFor(getItemDef(Items.IRON_PICKAXE))).toBe(PLAYER_ATTACK_DAMAGE);
+  });
+  it("iron sword deals more than fists (10)", () => {
+    const iron = attackDamageFor(getItemDef(Items.IRON_SWORD));
+    expect(iron).toBeGreaterThan(PLAYER_ATTACK_DAMAGE);
+    expect(iron).toBe(10);
+  });
+  it("diamond > iron > wooden sword", () => {
+    const d = attackDamageFor(getItemDef(Items.DIAMOND_SWORD));
+    const i = attackDamageFor(getItemDef(Items.IRON_SWORD));
+    const w = attackDamageFor(getItemDef(Items.WOODEN_SWORD));
+    expect(d).toBeGreaterThan(i);
+    expect(i).toBeGreaterThan(w);
+  });
+  it("attackMob still defaults to PLAYER_ATTACK_DAMAGE with 2 args", () => {
+    const mob = new Mob(2, "zombie", { x: 0, y: 0, z: 0 });
+    const full = MOB_STATS.zombie.maxHealth;
+    attackMob(mob, 7);
+    expect(mob.health).toBe(full - PLAYER_ATTACK_DAMAGE);
   });
 });
 

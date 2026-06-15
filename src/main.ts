@@ -52,7 +52,7 @@ import { IndexedDbStore, type SaveStore } from "./save/store";
 import { deserializeColumn } from "./save/serialize";
 import { ChunkColumn } from "./chunk/column";
 import { saveGame, loadGame, type ViewAngles } from "./game/persistence";
-import { MobDriver, pickMob, attackMob } from "./game/mob-driver";
+import { MobDriver, pickMob, attackMob, attackDamageFor } from "./game/mob-driver";
 import { MobRenderer } from "./rendering/mob-renderer";
 import { deserializeMobs } from "./mobs/persistence";
 import { InventoryScreen } from "./ui/inventory-screen";
@@ -678,9 +678,15 @@ function handleClick(button: number): void {
       );
       const blockDist = hit === null ? Infinity : blockHitDistance(eye, hit);
       if (mobDist <= blockDist) {
-        attackMob(mob, clock.totalTicks);
+        const slot = player.hotbar.selected;
+        const held = player.inventory.get(slot);
+        const heldDef = held === null ? null : getItemDef(held.itemId);
+        attackMob(mob, clock.totalTicks, attackDamageFor(heldDef));
         // Play hurt sound at mob position.
         gameAudio?.onMobHurt(mob.feet);
+        if (held !== null && isTool(held)) {
+          player.inventory.set(slot, damageTool(held));
+        }
         return; // this click hit a mob; skip the block break
       }
     }

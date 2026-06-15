@@ -22,6 +22,7 @@ import { damage } from "../survival/stats";
 import type { Clock } from "../time/clock";
 import { isNight } from "../time/clock";
 import { makeStack } from "../inventory/stack";
+import type { ItemDef, ToolTier } from "../rules/items";
 
 import { MobManager } from "../mobs/manager";
 import { Mob, type Vec3 } from "../mobs/entity";
@@ -52,6 +53,32 @@ import {
 
 /** Half-hearts a single player melee swing deals to a mob (v1: fists, no sword bonus). */
 export const PLAYER_ATTACK_DAMAGE = 4;
+
+/** Sword damage per tier, in half-hearts (fists = PLAYER_ATTACK_DAMAGE = 4). */
+const SWORD_DAMAGE: Record<ToolTier, number> = {
+  wood: 6,
+  stone: 8,
+  iron: 10,
+  diamond: 14,
+  gold: 6,
+};
+
+/**
+ * Half-hearts a melee hit deals given the held item. A sword deals its tier
+ * value; anything else (fists, non-sword tools, blocks, food) deals
+ * PLAYER_ATTACK_DAMAGE.
+ */
+export function attackDamageFor(heldDef: ItemDef | null): number {
+  if (
+    heldDef !== null &&
+    heldDef.kind === "tool" &&
+    heldDef.toolType === "sword" &&
+    heldDef.toolTier !== undefined
+  ) {
+    return SWORD_DAMAGE[heldDef.toolTier];
+  }
+  return PLAYER_ATTACK_DAMAGE;
+}
 
 /** Attempt a spawn roughly every this many ticks. */
 const SPAWN_INTERVAL_TICKS = 40;
@@ -476,9 +503,13 @@ function raySlab(
 }
 
 /**
- * Deal one player melee hit to `mob` at `currentTick`. v1 uses a flat
- * {@link PLAYER_ATTACK_DAMAGE} (fists); a per-tool sword bonus is deferred.
+ * Deal one player melee hit to `mob` at `currentTick`. Defaults to
+ * {@link PLAYER_ATTACK_DAMAGE} (fists); pass `amount` to apply sword damage.
  */
-export function attackMob(mob: Mob, currentTick: number): void {
-  mob.takeDamage(PLAYER_ATTACK_DAMAGE, currentTick);
+export function attackMob(
+  mob: Mob,
+  currentTick: number,
+  amount: number = PLAYER_ATTACK_DAMAGE,
+): void {
+  mob.takeDamage(amount, currentTick);
 }

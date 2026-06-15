@@ -5,18 +5,25 @@
  * Each cell corresponds to one (species, role) pair. The atlas uses the same
  * deterministic hash technique as atlas.ts — no Math.random, no wall-clock.
  *
- * Atlas cell layout (col, row) — stable ordered assignment:
- *   row 0: cow:body, cow:head, cow:leg, cow:tail
- *   row 1: pig:body, pig:head, pig:leg, pig:snout
- *   row 2: sheep:body, sheep:head, sheep:leg
- *   row 3: chicken:body, chicken:head, chicken:leg, chicken:beak
- *   row 4: zombie:body, zombie:head, zombie:leg, zombie:arm
- *   row 5: skeleton:body, skeleton:head, skeleton:leg, skeleton:arm
- *   row 6: creeper:body, creeper:head, creeper:leg
+ * Atlas cell layout — cells are assigned row-major from CELL_LIST in order,
+ * packed densely across the 8-column grid (no per-species row split).
+ * Actual positions as of this writing (row, col):
+ *   row 0 cols 0-5: cow:body, cow:head, cow:leg, cow:tail, cow:horn, cow:snout
+ *   row 0 cols 6-7: pig:body, pig:head
+ *   row 1 cols 0-7: pig:leg, pig:snout, sheep:body, sheep:head, sheep:leg,
+ *                   chicken:body, chicken:head, chicken:leg
+ *   row 2 cols 0-7: chicken:beak, zombie:body, zombie:head, zombie:leg, zombie:arm,
+ *                   skeleton:body, skeleton:head, skeleton:leg
+ *   row 3 cols 0-3: skeleton:arm, creeper:body, creeper:head, creeper:leg
+ * NEW (species, role) pairs MUST be appended to CELL_LIST so that existing
+ * UV cell assignments never shift.
  *
- * faceUV face order for Babylon CreateBox (documented per Babylon source):
- *   0 = +Z (front), 1 = -Z (back), 2 = +X (right), 3 = -X (left),
- *   4 = +Y (top),   5 = -Y (bottom)
+ * faceUV face order for Babylon CreateBox — confirmed from
+ * node_modules/@babylonjs/core/Meshes/Builders/boxBuilder.js normals array
+ * (Babylon 8, 6 faces × 4 vertices × 3 components = 72 values):
+ *   0 = +Z (front),  1 = -Z (back),
+ *   2 = +X (right),  3 = -X (left),
+ *   4 = +Y (top),    5 = -Y (bottom)
  */
 
 // ---------------------------------------------------------------------------
@@ -55,6 +62,12 @@ const MOB_BASE_RGB: Record<string, [number, number, number]> = {
  * Stable ordered list of all (species, role) pairs used by MODELS in
  * mob-renderer.ts. Each entry gets a unique cell in row-major order.
  * Adding new pairs always goes at the end to avoid shifting existing UVs.
+ *
+ * Head-shading note: the atlas currently applies forehead shading to every
+ * cell whose role is "head". However, only cow:head is actually used as a
+ * pivotRole:"head" part in mob-renderer.ts; other species' head meshes fall
+ * back to their body cell or the flat-color path. Per-species head/face atlas
+ * mapping is a later refinement.
  */
 const CELL_LIST: ReadonlyArray<[species: string, role: string]> = [
   // row 0
@@ -285,10 +298,8 @@ export function uvRegion(species: string, role: string): UVRect {
  * All 6 faces receive the same UV rect (per-face anatomical mapping is a
  * later refinement).
  *
- * Babylon CreateBox faceUV face order (index → face):
- *   0 = +Z (front)   1 = -Z (back)
- *   2 = +X (right)   3 = -X (left)
- *   4 = +Y (top)     5 = -Y (bottom)
+ * Face index → face mapping: see the module-level doc comment for the
+ * authoritative Babylon 8 faceUV order (confirmed from boxBuilder.js source).
  *
  * Each entry is { x: u0, y: v0, z: u1, w: v1 } — the Vector4 that Babylon
  * reads as (bottomLeftU, bottomLeftV, topRightU, topRightV).

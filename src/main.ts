@@ -35,6 +35,7 @@ import { Player, type InputState } from "./player/controller";
 import { raycastVoxel } from "./interaction/raycast";
 import { breakBlock, placeBlock } from "./interaction/edit";
 import { resolveUse } from "./interaction/use-item";
+import { breakTicks } from "./interaction/mining";
 import { getItemDef } from "./rules/items";
 import { updateHotbarHud } from "./ui/hotbar-hud";
 import { updateSurvivalHud } from "./ui/survival-hud";
@@ -302,6 +303,21 @@ function findSpawn(): { x: number; y: number; z: number } {
 
 let spawnPoint = findSpawn();
 const player = new Player(spawnPoint);
+
+// --- Mining timer (Phase 2): hold LMB to break; progress on the fixed tick.
+interface MiningState {
+  active: boolean;
+  x: number;
+  y: number;
+  z: number;
+  slot: number;
+  elapsed: number; // fixed-ticks accumulated against the current target
+}
+const mining: MiningState = { active: false, x: 0, y: 0, z: 0, slot: -1, elapsed: 0 };
+function resetMining(): void {
+  mining.active = false;
+  mining.elapsed = 0;
+}
 
 // Starter inventory: real tools + blocks + food, from the single factory.
 const starter = makeDefaultInventory();
@@ -672,27 +688,13 @@ function handleClick(button: number): void {
 
   if (hit === null) return;
   if (button === 0) {
-    const brokenId = world.getBlock(hit.block.x, hit.block.y, hit.block.z);
-    breakBlock(world, hit, renderer, player.inventory);
-    const breakPos = {
-      x: hit.block.x + 0.5,
-      y: hit.block.y + 0.5,
-      z: hit.block.z + 0.5,
-    };
-    // Play break sound at block world position.
-    gameAudio?.onBreak(brokenId, breakPos);
-    // Spawn block-debris particles at the same position.
-    gameEffects?.onBreak(brokenId, breakPos);
-    // Hint: first block broken → show "place a block" hint.
-    hintManager?.onBlockBreak();
-    // Breaking costs exhaustion; if a tool is held, wear it down by one use
-    // and write the result back (clearing the slot when the tool breaks).
-    addExhaustion(player.survival, EXHAUSTION.BREAK_BLOCK);
-    const slot = player.hotbar.selected;
-    const held = player.inventory.get(slot);
-    if (held !== null && isTool(held)) {
-      player.inventory.set(slot, damageTool(held));
-    }
+    // Start (or retarget) the mining timer; the fixed tick does the breaking.
+    mining.active = true;
+    mining.x = hit.block.x;
+    mining.y = hit.block.y;
+    mining.z = hit.block.z;
+    mining.slot = player.hotbar.selected;
+    mining.elapsed = 0;
   } else if (button === 2) {
     // RMB on a crafting table → open the workbench (do NOT place a block).
     const targetBlock = world.getBlock(hit.block.x, hit.block.y, hit.block.z);
@@ -754,6 +756,10 @@ function handleClick(button: number): void {
 
 canvas.addEventListener("mousedown", (e) => {
   handleClick(e.button);
+});
+
+canvas.addEventListener("mouseup", (e) => {
+  if (e.button === 0) resetMining();
 });
 
 // --- Render diagnostics overlay (F4 toggleable) ---------------------------
@@ -840,6 +846,47 @@ engine.runRenderLoop(() => {
 
   // Advance the body + game clock in fixed ticks (framerate-independent).
   while (!frozen && accumulator >= TICK_SECONDS) {
+    // --- Mining: accumulate progress; break exactly once when complete.
+    if (mining.active) {
+      const eyeNow = player.eyePosition();
+      const fwdNow = camera.getDirection(Vector3.Forward());
+      const hitNow = raycastVoxel(
+        eyeNow,
+        { x: fwdNow.x, y: fwdNow.y, z: fwdNow.z },
+        REACH,
+        (bx, by, bz) => world.getBlock(bx, by, bz),
+      );
+      if (
+        hitNow === null ||
+        hitNow.block.x !== mining.x ||
+        hitNow.block.y !== mining.y ||
+        hitNow.block.z !== mining.z ||
+        player.hotbar.selected !== mining.slot
+      ) {
+        resetMining();
+      } else {
+        const id = world.getBlock(mining.x, mining.y, mining.z);
+        const held = player.inventory.get(mining.slot);
+        const heldDef = held === null ? null : getItemDef(held.itemId);
+        const need = breakTicks(id, heldDef);
+        mining.elapsed += 1;
+        if (mining.elapsed >= need) {
+          const brokenId = id;
+          breakBlock(world, hitNow, renderer, player.inventory);
+          const breakPos = { x: mining.x + 0.5, y: mining.y + 0.5, z: mining.z + 0.5 };
+          gameAudio?.onBreak(brokenId, breakPos);
+          gameEffects?.onBreak(brokenId, breakPos);
+          hintManager?.onBlockBreak();
+          addExhaustion(player.survival, EXHAUSTION.BREAK_BLOCK);
+          // Durability charged EXACTLY ONCE, here on break (NOT per click).
+          if (held !== null && isTool(held)) {
+            player.inventory.set(mining.slot, damageTool(held));
+          }
+          resetMining();
+        }
+      }
+    }
+
     player.update(input, camera.rotation.y, world);
     advance(clock, 1);
     // Mobs advance on the same fixed tick. currentTick is the clock's monotonic

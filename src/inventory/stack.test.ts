@@ -5,10 +5,12 @@ import {
   type ToolTier,
   makeStack,
   makeToolStack,
+  makeArmorStack,
   canMerge,
   isTool,
   damageTool,
 } from "./stack";
+import { Items, armorDurabilityOf } from "../rules/items";
 
 describe("makeStack", () => {
   it("defaults maxStack to 64", () => {
@@ -111,5 +113,18 @@ describe("damageTool", () => {
     const d = damageTool(t);
     expect(d?.durability).toBe(1560);
     expect(d?.maxDurability).toBe(1561);
+  });
+});
+
+describe("makeArmorStack", () => {
+  it("makeArmorStack seeds full per-slot durability", () => {
+    const s = makeArmorStack(Items.IRON_CHESTPLATE);
+    expect(s.count).toBe(1);
+    expect(s.maxStack).toBe(1);
+    expect(s.durability).toBe(armorDurabilityOf(Items.IRON_CHESTPLATE)!);
+    expect(s.maxDurability).toBe(s.durability);
+  });
+  it("makeArmorStack on a non-armor id → plain stack (no durability)", () => {
+    expect(makeArmorStack(Items.IRON_PICKAXE).durability).toBeUndefined();
   });
 });

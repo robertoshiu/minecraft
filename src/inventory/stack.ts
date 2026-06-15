@@ -13,6 +13,7 @@
  */
 
 import { TOOL_DURABILITY } from "../rules/mc-1.20";
+import { armorDurabilityOf } from "../rules/items";
 
 /**
  * A single inventory slot's worth of items.
@@ -54,6 +55,16 @@ export function makeToolStack(itemId: number, tier: ToolTier): ItemStack {
     durability: max,
     maxDurability: max,
   };
+}
+
+/** Create a single armor piece at full per-slot durability. */
+export function makeArmorStack(itemId: number): ItemStack {
+  const max = armorDurabilityOf(itemId);
+  if (max === null) {
+    // Not an armor id — fall back to a plain (durability-less) stack.
+    return { itemId, count: 1, maxStack: 1 };
+  }
+  return { itemId, count: 1, maxStack: 1, durability: max, maxDurability: max };
 }
 
 /** A tool is any stack with a defined durability. */

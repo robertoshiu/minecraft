@@ -31,6 +31,7 @@ import {
 } from "./physics";
 import { sweepMove, type Vec3 } from "./collision";
 import { Inventory, Hotbar } from "../inventory/inventory";
+import { Equipment } from "../inventory/equipment";
 import type { World } from "../world/world";
 import {
   makeSurvivalState,
@@ -66,6 +67,7 @@ export class Player {
   survival: SurvivalState;
   readonly inventory: Inventory;
   readonly hotbar: Hotbar;
+  readonly equipment: Equipment;
   private readonly spawn: Vec3;
 
   constructor(spawn: Vec3) {
@@ -75,6 +77,7 @@ export class Player {
     this.survival = makeSurvivalState();
     this.inventory = new Inventory();
     this.hotbar = new Hotbar();
+    this.equipment = new Equipment();
   }
 
   /**

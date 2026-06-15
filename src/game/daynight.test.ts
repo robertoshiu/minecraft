@@ -8,7 +8,7 @@ import { Color4 } from "@babylonjs/core/Maths/math.color";
 
 import { makeClock, advance } from "../time/clock";
 import { TIME } from "../rules/mc-1.20";
-import { skyColorAt } from "../time/sky";
+import { skyColorAt, sunLightIntensityAt } from "../time/sky";
 import { applySky, type SkyTargets } from "./daynight";
 
 let engine: NullEngine;
@@ -34,14 +34,41 @@ function targets(): SkyTargets {
 }
 
 describe("applySky", () => {
-  it("sets the scene clear color (and fog color) to the day-time sky color", () => {
-    const clock = makeClock(6000); // noon
+  it("sets the scene clear color to the day-time sky color", () => {
+    const clock = makeClock(6000); // mid-morning, full sun intensity
     applySky(targets(), clock);
     const [r, g, b] = skyColorAt(6000);
     expect(scene.clearColor.r).toBeCloseTo(r, 5);
     expect(scene.clearColor.g).toBeCloseTo(g, 5);
     expect(scene.clearColor.b).toBeCloseTo(b, 5);
+  });
+
+  it("fog is warmer than the sky during the day (decoupled from clearColor)", () => {
+    const tod = 6000; // mid-morning: sunLightIntensityAt returns 1 (full day)
+    applySky(targets(), makeClock(tod));
+    const [r, , b] = skyColorAt(tod);
+    // Fog should be warmer (more red) and less blue than the sky clear color.
+    expect(scene.fogColor.r).toBeGreaterThan(r);
+    expect(scene.fogColor.b).toBeLessThan(b);
+    expect(scene.fogColor.g).toBeGreaterThanOrEqual(scene.clearColor.g);
+    // All channels must stay within [0, 1].
+    expect(scene.fogColor.r).toBeGreaterThanOrEqual(0);
+    expect(scene.fogColor.r).toBeLessThanOrEqual(1);
+    expect(scene.fogColor.g).toBeGreaterThanOrEqual(0);
+    expect(scene.fogColor.g).toBeLessThanOrEqual(1);
+    expect(scene.fogColor.b).toBeGreaterThanOrEqual(0);
+    expect(scene.fogColor.b).toBeLessThanOrEqual(1);
+  });
+
+  it("fog tracks the sky at night when sun intensity is ~0", () => {
+    const tod = 18000; // midnight: sunLightIntensityAt returns 0
+    applySky(targets(), makeClock(tod));
+    const [r, g, b] = skyColorAt(tod);
+    // With intensity == 0 the offsets vanish, so fog == sky exactly.
+    expect(sunLightIntensityAt(tod)).toBe(0);
     expect(scene.fogColor.r).toBeCloseTo(r, 5);
+    expect(scene.fogColor.g).toBeCloseTo(g, 5);
+    expect(scene.fogColor.b).toBeCloseTo(b, 5);
   });
 
   it("sun is bright at noon and dark at midnight", () => {

@@ -44,8 +44,9 @@ export interface SkyTargets {
 
 /**
  * Apply the clock's current time-of-day to the scene: sky clear color, fog
- * color (== sky), directional sun intensity + direction, and a dimmer
- * hemispheric ambient at night. Called every render frame.
+ * color (warmer + less blue than the sky during the day, tracks sky at night),
+ * directional sun intensity + direction, and a dimmer hemispheric ambient at
+ * night. Called every render frame.
  */
 export function applySky(targets: SkyTargets, clock: Clock): void {
   const tod = tickOfDay(clock);
@@ -54,11 +55,17 @@ export function applySky(targets: SkyTargets, clock: Clock): void {
   const intensity = sunLightIntensityAt(tod);
   const [sx, sy, sz] = sunDirectionAt(tod);
 
-  // Sky clear color (alpha unchanged) + fog color tracks the sky.
+  // Sky clear color (alpha unchanged).
   targets.scene.clearColor.r = r;
   targets.scene.clearColor.g = g;
   targets.scene.clearColor.b = b;
-  targets.scene.fogColor = new Color3(r, g, b);
+
+  // Fog: warmer + slightly less blue than the sky during the day (intensity-scaled);
+  // tracks the sky at night when intensity ~= 0.
+  const fogR = Math.min(1, r + 0.04 * intensity);
+  const fogG = Math.min(1, Math.max(0, g + 0.02 * intensity));
+  const fogB = Math.min(1, Math.max(0, b - 0.03 * intensity));
+  targets.scene.fogColor = new Color3(fogR, fogG, fogB);
 
   // Directional light: scale [0,1] intensity to a sane max.
   targets.sun.intensity = intensity * SUN_MAX_INTENSITY;

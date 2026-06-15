@@ -227,9 +227,7 @@ describe("WorldRenderer.getFirstOpaqueMesh", () => {
     const renderer = new WorldRenderer(localScene, world, createTerrainMaterials(localScene));
     renderer.buildInitial(1);
     const mesh = renderer.getFirstOpaqueMesh();
-    if (renderer.getMeshCount() > 0) {
-      expect(mesh).not.toBeNull();
-    }
+    expect(mesh).not.toBeNull();
     localScene.dispose();
     localEngine.dispose();
   });

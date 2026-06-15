@@ -751,12 +751,12 @@ function updateRenderDiag(nowMs: number): void {
   renderDiagLastUpdate = nowMs;
 
   const opaqueMeshCount = renderer.getMeshCount();
-  const _firstMesh = renderer.getFirstOpaqueMesh();
-  const opaqueMaterialReady = _firstMesh !== null
-    ? materials.opaque.isReady(_firstMesh)
+  const firstMesh = renderer.getFirstOpaqueMesh();
+  const opaqueMaterialReady = firstMesh !== null
+    ? materials.opaque.isReady(firstMesh)
     : materials.opaque.isReady();
-  const transparentMaterialReady = _firstMesh !== null
-    ? materials.transparent.isReady(_firstMesh)
+  const transparentMaterialReady = firstMesh !== null
+    ? materials.transparent.isReady(firstMesh)
     : materials.transparent.isReady();
   // Retrieve the atlas texture from the opaque material's active texture list.
   const activeTextures = materials.opaque.getActiveTextures();
@@ -1024,14 +1024,14 @@ const testApiBase = {
   renderDiag: (): RenderDiagSnapshot => {
     const activeTextures = materials.opaque.getActiveTextures();
     const atlasTex = activeTextures.find((t) => t.name === "terrain-atlas") ?? null;
-    const _diagMesh = renderer.getFirstOpaqueMesh();
+    const diagMesh = renderer.getFirstOpaqueMesh();
     return {
       opaqueMeshCount: renderer.getMeshCount(),
-      opaqueMaterialReady: _diagMesh !== null
-        ? materials.opaque.isReady(_diagMesh)
+      opaqueMaterialReady: diagMesh !== null
+        ? materials.opaque.isReady(diagMesh)
         : materials.opaque.isReady(),
-      transparentMaterialReady: _diagMesh !== null
-        ? materials.transparent.isReady(_diagMesh)
+      transparentMaterialReady: diagMesh !== null
+        ? materials.transparent.isReady(diagMesh)
         : materials.transparent.isReady(),
       atlasTextureReady: atlasTex !== null ? atlasTex.isReady() : false,
     };

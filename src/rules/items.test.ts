@@ -14,6 +14,8 @@ import {
   isArmor,
   armorDefenseOf,
   armorDurabilityOf,
+  isPotion,
+  potionEffectOf,
   type ItemId,
 } from "./items";
 
@@ -169,5 +171,49 @@ describe("ITEM_REGISTRY — armor", () => {
     expect(isArmor(Items.IRON_PICKAXE)).toBe(false);
     expect(isArmor(Items.BREAD)).toBe(false);
     expect(isArmor(Blocks.STONE)).toBe(false);
+  });
+});
+
+describe("ITEM_REGISTRY — ranged + potions (Phase 5)", () => {
+  it("registers BOW and ARROW with correct stack sizes", () => {
+    expect(ITEM_REGISTRY[Items.BOW]?.maxStack).toBe(1);
+    expect(ITEM_REGISTRY[Items.ARROW]?.maxStack).toBe(64);
+    expect(isPotion(Items.BOW)).toBe(false);
+  });
+  it("registers all 8 potions with a potionEffect", () => {
+    const potionIds = [
+      Items.POTION_REGENERATION, Items.POTION_HEALING, Items.POTION_HARMING,
+      Items.POTION_POISON, Items.POTION_RESISTANCE, Items.POTION_STRENGTH,
+      Items.POTION_SWIFTNESS, Items.POTION_FIRE_RESISTANCE,
+    ];
+    for (const id of potionIds) {
+      const def = ITEM_REGISTRY[id];
+      expect(def, `missing potion def for ${id}`).toBeDefined();
+      expect(def?.kind).toBe("potion");
+      expect(def?.maxStack).toBe(1);
+      expect(isPotion(id)).toBe(true);
+      expect(potionEffectOf(id)).not.toBeNull();
+    }
+  });
+
+  it("each potion maps to its correct effect type + amplifier (catches transposition)", () => {
+    const expected: [number, string][] = [
+      [Items.POTION_REGENERATION, "regeneration"],
+      [Items.POTION_HEALING, "instant_health"],
+      [Items.POTION_HARMING, "instant_damage"],
+      [Items.POTION_POISON, "poison"],
+      [Items.POTION_RESISTANCE, "resistance"],
+      [Items.POTION_STRENGTH, "strength"],
+      [Items.POTION_SWIFTNESS, "swiftness"],
+      [Items.POTION_FIRE_RESISTANCE, "fire_resistance"],
+    ];
+    for (const [id, type] of expected) {
+      expect(potionEffectOf(id)?.type).toBe(type);
+      expect(potionEffectOf(id)?.amplifier).toBe(0);
+    }
+    // Instants carry no stored duration; timed potions do.
+    expect(potionEffectOf(Items.POTION_HEALING)?.durationTicks).toBe(0);
+    expect(potionEffectOf(Items.POTION_HARMING)?.durationTicks).toBe(0);
+    expect(potionEffectOf(Items.POTION_REGENERATION)?.durationTicks).toBeGreaterThan(0);
   });
 });

@@ -22,7 +22,9 @@ import {
   type ArmorSlot,
   ARMOR_DEFENSE,
   ARMOR_DURABILITY,
+  EFFECT_TUNING,
 } from "./mc-1.20";
+import type { EffectType } from "../effects/status";
 
 /** A numeric item identifier. Block items reuse the block id; non-block items start at 256. */
 export type ItemId = number;
@@ -40,7 +42,7 @@ export interface ItemDef {
   id: ItemId;
   name: string;
   maxStack: number;
-  kind: "block" | "tool" | "food" | "material" | "armor";
+  kind: "block" | "tool" | "food" | "material" | "armor" | "potion";
   /** Block placed when this item is used (block items only). */
   placesBlock?: BlockId;
   /** Tool material tier (tools only). */
@@ -53,6 +55,8 @@ export interface ItemDef {
   armorTier?: ArmorTier;
   /** Armor slot this piece occupies (armor only). */
   armorSlot?: ArmorSlot;
+  /** Effect applied when drunk (potions only). `durationTicks` is ignored for instants. */
+  potionEffect?: { type: EffectType; amplifier: number; durationTicks: number };
 }
 
 /**
@@ -123,6 +127,20 @@ export const Items = {
   DIAMOND_CHESTPLATE: NON_BLOCK_BASE + 56,
   DIAMOND_LEGGINGS: NON_BLOCK_BASE + 57,
   DIAMOND_BOOTS: NON_BLOCK_BASE + 58,
+
+  // Ranged (Phase 5).
+  BOW: NON_BLOCK_BASE + 59,
+  ARROW: NON_BLOCK_BASE + 60,
+
+  // Potions (Phase 5). Drinkable; consumed on use; apply a status effect.
+  POTION_REGENERATION: NON_BLOCK_BASE + 61,
+  POTION_HEALING: NON_BLOCK_BASE + 62,
+  POTION_HARMING: NON_BLOCK_BASE + 63,
+  POTION_POISON: NON_BLOCK_BASE + 64,
+  POTION_RESISTANCE: NON_BLOCK_BASE + 65,
+  POTION_STRENGTH: NON_BLOCK_BASE + 66,
+  POTION_SWIFTNESS: NON_BLOCK_BASE + 67,
+  POTION_FIRE_RESISTANCE: NON_BLOCK_BASE + 68,
 } as const;
 
 /** Default stack size for ordinary (non-tool) items. */
@@ -164,6 +182,23 @@ function armor(
   armorSlot: ArmorSlot,
 ): ItemDef {
   return { id, name, maxStack: 1, kind: "armor", armorTier, armorSlot };
+}
+
+function potion(
+  id: ItemId,
+  name: string,
+  type: EffectType,
+  amplifier: number,
+  durationTicks: number,
+): ItemDef {
+  // Potions stack to 1 (MC), like a bottle.
+  return {
+    id,
+    name,
+    maxStack: 1,
+    kind: "potion",
+    potionEffect: { type, amplifier, durationTicks },
+  };
 }
 
 function blockItem(id: BlockId, name: string): ItemDef {
@@ -290,6 +325,21 @@ const NON_BLOCK_DEFS: readonly ItemDef[] = [
   armor(Items.DIAMOND_CHESTPLATE, "Diamond Chestplate", "diamond", "chestplate"),
   armor(Items.DIAMOND_LEGGINGS, "Diamond Leggings", "diamond", "leggings"),
   armor(Items.DIAMOND_BOOTS, "Diamond Boots", "diamond", "boots"),
+
+  // Ranged (Phase 5). Bow stacks to 1; arrows stack to 64.
+  { id: Items.BOW, name: "Bow", maxStack: 1, kind: "material" },
+  { id: Items.ARROW, name: "Arrow", maxStack: 64, kind: "material" },
+
+  // Potions (Phase 5). DEFAULT_DURATION drives non-instant effects; instants
+  // ignore duration. Amplifier 0 = level I.
+  potion(Items.POTION_REGENERATION, "Potion of Regeneration", "regeneration", 0, EFFECT_TUNING.DEFAULT_DURATION),
+  potion(Items.POTION_HEALING, "Potion of Healing", "instant_health", 0, 0),
+  potion(Items.POTION_HARMING, "Potion of Harming", "instant_damage", 0, 0),
+  potion(Items.POTION_POISON, "Potion of Poison", "poison", 0, EFFECT_TUNING.DEFAULT_DURATION),
+  potion(Items.POTION_RESISTANCE, "Potion of Resistance", "resistance", 0, EFFECT_TUNING.DEFAULT_DURATION),
+  potion(Items.POTION_STRENGTH, "Potion of Strength", "strength", 0, EFFECT_TUNING.DEFAULT_DURATION),
+  potion(Items.POTION_SWIFTNESS, "Potion of Swiftness", "swiftness", 0, EFFECT_TUNING.DEFAULT_DURATION),
+  potion(Items.POTION_FIRE_RESISTANCE, "Potion of Fire Resistance", "fire_resistance", 0, EFFECT_TUNING.DEFAULT_DURATION),
 ];
 
 /** Block items whose max stack differs from the default 64. */
@@ -387,4 +437,18 @@ export function armorDurabilityOf(id: ItemId): number | null {
     return null;
   }
   return ARMOR_DURABILITY[def.armorTier][def.armorSlot];
+}
+
+/** True iff this item is a drinkable potion. */
+export function isPotion(id: ItemId): boolean {
+  return getItemDef(id).kind === "potion";
+}
+
+/** The effect a potion applies when drunk, or null for non-potions. */
+export function potionEffectOf(
+  id: ItemId,
+): { type: EffectType; amplifier: number; durationTicks: number } | null {
+  const def = getItemDef(id);
+  if (def.kind !== "potion" || def.potionEffect === undefined) return null;
+  return def.potionEffect;
 }

@@ -37,6 +37,8 @@ export interface PlayerSave {
   spawnX: number;
   spawnY: number;
   spawnZ: number;
+  /** Worn armor [helmet, chestplate, leggings, boots]. Added in save v4; default all-null. */
+  equipment: (ItemStackSave | null)[];
 }
 
 /** A single inventory slot's item. Tools carry durability; most items don't. */
@@ -185,9 +187,11 @@ const SAVE_MAGIC = 0x4d43_5357; // "MCSW" (Minecraft Save World), as a u32
  *  - 1: header + player + binary columns.
  *  - 2: …plus a trailing length-prefixed JSON {@link MobSave}[] blob.
  *  - 3: …plus spawnX/spawnY/spawnZ (f64×3) appended at the end of the player record.
- * Older containers are still readable (spawn defaults to the player position).
+ *  - 4: …plus a length-prefixed equipment slot array at the end of the player record.
+ * Older containers are still readable (spawn defaults to the player position;
+ * equipment defaults to all-null on containers older than format 4).
  */
-const SAVE_FORMAT = 3;
+const SAVE_FORMAT = 4;
 /** The lowest container format this build can still decode. */
 const SAVE_FORMAT_MIN = 1;
 
@@ -360,6 +364,28 @@ function writePlayer(w: ByteWriter, p: PlayerSave): void {
   w.f64(p.spawnX);
   w.f64(p.spawnY);
   w.f64(p.spawnZ);
+
+  // Equipment slots (added in container format 4).
+  w.u32(p.equipment.length);
+  for (const slot of p.equipment) {
+    if (slot === null) {
+      w.u8(SLOT_EMPTY);
+      continue;
+    }
+    w.u8(SLOT_PRESENT);
+    w.i32(slot.itemId);
+    w.i32(slot.count);
+    w.i32(slot.maxStack);
+    const hasDur =
+      slot.durability !== undefined && slot.maxDurability !== undefined;
+    if (hasDur) {
+      w.u8(DURABILITY_PRESENT);
+      w.i32(slot.durability ?? 0);
+      w.i32(slot.maxDurability ?? 0);
+    } else {
+      w.u8(DURABILITY_ABSENT);
+    }
+  }
 }
 
 function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
@@ -405,6 +431,31 @@ function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
     spawnZ = r.f64();
   }
 
+  // Equipment (added in container format 4). Older containers → all-null.
+  const equipment: (ItemStackSave | null)[] = [null, null, null, null];
+  if (containerFormat >= 4) {
+    const eqCount = r.u32();
+    equipment.length = 0;
+    for (let i = 0; i < eqCount; i++) {
+      const present = r.u8();
+      if (present === SLOT_EMPTY) {
+        equipment.push(null);
+        continue;
+      }
+      const itemId = r.i32();
+      const count = r.i32();
+      const maxStack = r.i32();
+      const durFlag = r.u8();
+      if (durFlag === DURABILITY_PRESENT) {
+        const durability = r.i32();
+        const maxDurability = r.i32();
+        equipment.push({ itemId, count, maxStack, durability, maxDurability });
+      } else {
+        equipment.push({ itemId, count, maxStack });
+      }
+    }
+  }
+
   return {
     x,
     y,
@@ -419,6 +470,7 @@ function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
     spawnX,
     spawnY,
     spawnZ,
+    equipment,
   };
 }
 

@@ -25,6 +25,7 @@ import { migrate, SAVE_VERSION } from "../save/migration";
 import { atomicWrite, safeRead, type SaveStore } from "../save/store";
 import { serializeMobs } from "../mobs/persistence";
 import type { MobManager } from "../mobs/manager";
+import { type Equipment, ARMOR_SLOTS } from "../inventory/equipment";
 
 /** The canonical key the single-world save lives under in the store. */
 export const SAVE_KEY = "world";
@@ -47,6 +48,14 @@ function toItemSave(stack: ItemStack): ItemStackSave {
     save.maxDurability = stack.maxDurability;
   }
   return save;
+}
+
+/** Snapshot the 4 armor slots [helmet, chestplate, leggings, boots] into save shape. */
+function snapshotEquipment(eq: Equipment): (ItemStackSave | null)[] {
+  return ARMOR_SLOTS.map((slot) => {
+    const stack = eq.get(slot);
+    return stack === null ? null : toItemSave(stack);
+  });
 }
 
 /** Snapshot all 36 inventory slots into save shape (empty slots → null). */
@@ -87,6 +96,7 @@ export function buildWorldSave(
     spawnX: sp.x,
     spawnY: sp.y,
     spawnZ: sp.z,
+    equipment: snapshotEquipment(player.equipment),
   };
 
   const columns: Record<string, Uint8Array> = {};

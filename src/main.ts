@@ -77,7 +77,7 @@ import { ParticleManager } from "./effects/particles";
 import { GameEffects } from "./effects/game-effects";
 import { initPostFX, type PostFXController } from "./rendering/post-fx";
 import { HintManager } from "./ui/hints";
-import { Equipment } from "./inventory/equipment";
+import { Equipment, ARMOR_SLOTS } from "./inventory/equipment";
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
@@ -389,6 +389,13 @@ function restoreFromSave(save: Awaited<ReturnType<typeof loadGame>>): void {
     player.inventory.set(i, slot === null ? null : { ...slot });
   }
   player.hotbar.select(p.selectedSlot);
+
+  // Worn armor (save v4+; older saves migrate to all-null).
+  const eq = p.equipment ?? [null, null, null, null];
+  ARMOR_SLOTS.forEach((armorSlot, i) => {
+    const slot = eq[i] ?? null;
+    player.equipment.set(armorSlot, slot === null ? null : { ...slot });
+  });
 
   // Live mobs (save v2+; absent on older saves → empty list).
   mobDriver.manager.load(deserializeMobs(save.mobs ?? []));

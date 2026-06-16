@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Blocks } from "../rules/mc-1.20";
+import { Items } from "../rules/items";
 import { ChunkColumn } from "../chunk/column";
 import {
   serializeColumn,
@@ -113,6 +114,12 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
       spawnX: 12.5,
       spawnY: 71.0,
       spawnZ: -340.25,
+      equipment: [
+        { itemId: Items.IRON_HELMET, count: 1, maxStack: 1, durability: 165, maxDurability: 165 },
+        null,
+        null,
+        { itemId: Items.LEATHER_BOOTS, count: 1, maxStack: 1 },
+      ],
     };
   }
 
@@ -148,6 +155,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
     expect(round.player.selectedSlot).toBe(3);
 
     expect(round.player.inventory).toEqual(player.inventory);
+    expect(round.player.equipment).toEqual(player.equipment);
 
     // The tool slot specifically retains durability + maxDurability.
     const tool = round.player.inventory[2];
@@ -214,6 +222,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
         spawnX: 0,
         spawnY: 0,
         spawnZ: 0,
+        equipment: [],
       },
       columns: {},
     };
@@ -237,6 +246,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
       spawnX: 0,
       spawnY: 64,
       spawnZ: 0,
+      equipment: [],
     };
   }
 

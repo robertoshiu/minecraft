@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { Blocks } from "../rules/mc-1.20";
+import { Items } from "../rules/items";
 import { ChunkColumn } from "../chunk/column";
 import { World } from "../world/world";
 import { Player } from "../player/controller";
 import { makeStack, makeToolStack } from "../inventory/stack";
+import { ARMOR_SLOTS } from "../inventory/equipment";
 import { makeClock } from "../time/clock";
 import {
   serializeSave,
@@ -52,7 +54,7 @@ describe("buildWorldSave → serialize → deserialize → migrate round-trip", 
     });
     const round = migrate(deserializeSave(serializeSave(save)));
 
-    expect(round.version).toBe(SAVE_VERSION); // 3
+    expect(round.version).toBe(SAVE_VERSION); // 4
     expect(round.seed).toBe(4242);
     expect(round.totalTicks).toBe(12345);
 
@@ -88,6 +90,37 @@ describe("buildWorldSave → serialize → deserialize → migrate round-trip", 
     if (colA === undefined || colB === undefined) throw new Error("missing column");
     expect(deserializeColumn(colA).getBlock(1, 64, 2)).toBe(Blocks.DIAMOND_ORE);
     expect(deserializeColumn(colB).getBlock(3, 10, 4)).toBe(Blocks.GOLD_ORE);
+  });
+
+  it("equipment round-trips through save → serialize → deserialize → restore", () => {
+    const world = tinyWorld();
+    const player = makeTestPlayer();
+    const clock = makeClock(0);
+
+    // Wear a diamond chestplate before saving.
+    player.equipment.equip("chestplate", makeStack(Items.DIAMOND_CHESTPLATE, 1, 1));
+
+    const save = buildWorldSave(world, player, clock, { yaw: 0, pitch: 0 });
+    const round = migrate(deserializeSave(serializeSave(save)));
+
+    // Assert that the equipment survives in the save shape (mirroring inventory assertions).
+    expect(round.player.equipment[1]).toMatchObject({
+      itemId: Items.DIAMOND_CHESTPLATE,
+      count: 1,
+    });
+    expect(round.player.equipment[0]).toBeNull();
+    expect(round.player.equipment[2]).toBeNull();
+    expect(round.player.equipment[3]).toBeNull();
+
+    // Restore into a fresh Player and verify the armor slot is populated.
+    const restored = new Player({ x: 0, y: 64, z: 0 });
+    const p = round.player;
+    const eq = p.equipment ?? [null, null, null, null];
+    ARMOR_SLOTS.forEach((armorSlot, i) => {
+      const slot = eq[i] ?? null;
+      restored.equipment.set(armorSlot, slot === null ? null : { ...slot });
+    });
+    expect(restored.equipment.get("chestplate")?.itemId).toBe(Items.DIAMOND_CHESTPLATE);
   });
 });
 

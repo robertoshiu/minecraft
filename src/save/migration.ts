@@ -11,7 +11,7 @@
 import { type WorldSave } from "./serialize";
 
 /** The current on-disk save version this build writes and reads natively. */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Transforms a save from version `k` to version `k+1`. */
 export type Migration = (data: WorldSave) => WorldSave;
@@ -26,6 +26,8 @@ export type Migration = (data: WorldSave) => WorldSave;
  *   v2 saves predate bed-spawn, so the upgrade defaults spawn to the player's
  *   current position (x, y, z) — the same behavior as the binary reader for
  *   older container formats.
+ * - `MIGRATIONS[3]` (v3 -> v4): adds the equipment array to the player record.
+ *   v3 saves predate armor persistence, so all four slots default to null.
  */
 export const MIGRATIONS: Record<number, Migration> = {
   1: (data) => ({ ...data, version: 2, mobs: [] }),
@@ -37,6 +39,14 @@ export const MIGRATIONS: Record<number, Migration> = {
       spawnX: data.player.x,
       spawnY: data.player.y,
       spawnZ: data.player.z,
+    },
+  }),
+  3: (data) => ({
+    ...data,
+    version: 4,
+    player: {
+      ...data.player,
+      equipment: [null, null, null, null],
     },
   }),
 };

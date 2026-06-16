@@ -22,6 +22,7 @@ function emptyPlayer(): PlayerSave {
     spawnX: 0,
     spawnY: 0,
     spawnZ: 0,
+    equipment: [],
   };
 }
 
@@ -112,8 +113,8 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     expect(() => migrate(saveAt(0), 1)).toThrow(/did not advance/);
   });
 
-  it("exposes SAVE_VERSION = 3 and a MIGRATIONS registry", () => {
-    expect(SAVE_VERSION).toBe(3);
+  it("exposes SAVE_VERSION = 4 and a MIGRATIONS registry", () => {
+    expect(SAVE_VERSION).toBe(4);
     expect(typeof MIGRATIONS).toBe("object");
   });
 
@@ -132,11 +133,20 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     v2.player.x = 10;
     v2.player.y = 64;
     v2.player.z = -5;
-    const out = migrate(v2); // default target = SAVE_VERSION (3)
+    const out = migrate(v2, 3); // target explicitly v3
     expect(out.version).toBe(3);
     expect(out.player.spawnX).toBe(10);
     expect(out.player.spawnY).toBe(64);
     expect(out.player.spawnZ).toBe(-5);
     expect(out.seed).toBe(456);
+  });
+
+  it("MIGRATIONS[3] adds an all-null equipment array (v3 → v4)", () => {
+    const v3 = saveAt(3);
+    const step = MIGRATIONS[3];
+    if (step === undefined) throw new Error("MIGRATIONS[3] is not registered");
+    const out = step(v3);
+    expect(out.version).toBe(4);
+    expect(out.player.equipment).toEqual([null, null, null, null]);
   });
 });

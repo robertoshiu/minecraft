@@ -110,6 +110,15 @@ describe("generateAtlasRGBA", () => {
     expect(b).toBeLessThan(r - 50); // blue well below red
   });
 
+  it("brewing-stand tile (index 36) center texel reads brownish, not magenta", () => {
+    const [r, g, _b, a] = centerPixel(36); // brewing_stand — [0.34, 0.30, 0.26]
+    expect(a).toBe(255);
+    // Magenta fallback is [0.8, 0.2, 0.8] → R high, B high. The stand is dark
+    // brown: R modest, G ~ R, B below R. Assert it is NOT the magenta debug.
+    expect(r).toBeLessThan(150); // 0.34 * 255 ≈ 87 (well below magenta R ≈ 204)
+    expect(Math.abs(r - g)).toBeLessThan(40); // brown: R≈G (magenta has G≈51)
+  });
+
   it("all pixels have alpha = 255", () => {
     // Spot-check alpha every 512 bytes across the full atlas.
     for (let i = 3; i < atlas.length; i += 512 * 4) {

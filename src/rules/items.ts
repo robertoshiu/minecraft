@@ -141,6 +141,13 @@ export const Items = {
   POTION_STRENGTH: NON_BLOCK_BASE + 66,
   POTION_SWIFTNESS: NON_BLOCK_BASE + 67,
   POTION_FIRE_RESISTANCE: NON_BLOCK_BASE + 68,
+
+  // Brewing ingredients (Phase 6b).
+  GLASS_BOTTLE: NON_BLOCK_BASE + 69,
+  WATER_BOTTLE: NON_BLOCK_BASE + 70,
+  NETHER_WART: NON_BLOCK_BASE + 71,
+  BLAZE_ROD: NON_BLOCK_BASE + 72,
+  BLAZE_POWDER: NON_BLOCK_BASE + 73,
 } as const;
 
 /** Default stack size for ordinary (non-tool) items. */
@@ -259,6 +266,7 @@ const BLOCK_ITEM_NAMES: Readonly<Record<BlockId, string>> = {
   [Blocks.BIRCH_LEAVES]: "Birch Leaves",
   [Blocks.BIRCH_PLANKS]: "Birch Planks",
   [Blocks.BED]: "Bed",
+  [Blocks.BREWING_STAND]: "Brewing Stand",
 };
 
 // --- Assemble all defs -----------------------------------------------------
@@ -340,6 +348,14 @@ const NON_BLOCK_DEFS: readonly ItemDef[] = [
   potion(Items.POTION_STRENGTH, "Potion of Strength", "strength", 0, EFFECT_TUNING.DEFAULT_DURATION),
   potion(Items.POTION_SWIFTNESS, "Potion of Swiftness", "swiftness", 0, EFFECT_TUNING.DEFAULT_DURATION),
   potion(Items.POTION_FIRE_RESISTANCE, "Potion of Fire Resistance", "fire_resistance", 0, EFFECT_TUNING.DEFAULT_DURATION),
+
+  // Brewing ingredients (Phase 6b). WATER_BOTTLE is the brew base; the others
+  // are reagents. GLASS_BOTTLE crafts into WATER_BOTTLE (out of scope: recipe).
+  material(Items.GLASS_BOTTLE, "Glass Bottle"),
+  material(Items.WATER_BOTTLE, "Water Bottle"),
+  material(Items.NETHER_WART, "Nether Wart"),
+  material(Items.BLAZE_ROD, "Blaze Rod"),
+  material(Items.BLAZE_POWDER, "Blaze Powder"),
 ];
 
 /** Block items whose max stack differs from the default 64. */

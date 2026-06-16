@@ -69,8 +69,9 @@
  *   33   birch_leaves           BIRCH_LEAVES (all)
  *   34   birch_planks           BIRCH_PLANKS (all)
  *   35   bed                    BED (all)
+ *   36   brewing_stand          BREWING_STAND (all)
  *
- * Highest index used: 35 (well within 0..255).
+ * Highest index used: 36 (well within 0..255).
  */
 
 import { Blocks, type BlockId } from "./mc-1.20";
@@ -132,6 +133,7 @@ const TILE = {
   BIRCH_LEAVES: 33,
   BIRCH_PLANKS: 34,
   BED: 35,
+  BREWING_STAND: 36,
 } as const;
 
 /** Same tile on all six faces. */
@@ -235,6 +237,11 @@ const DEFS: readonly BlockDef[] = [
 
   // Bed — transparent solid (alpha pass, no occlusion); single-block simplification.
   transparentSolid(Blocks.BED, "Bed", uniform(TILE.BED)),
+
+  // Brewing stand — transparent solid (alpha pass, no occlusion); interactive
+  // block opened via RMB (mirrors crafting table). Solid so the player cannot
+  // walk through it; non-opaque so it renders in the alpha pass like the bed.
+  transparentSolid(Blocks.BREWING_STAND, "Brewing Stand", uniform(TILE.BREWING_STAND)),
 
   // Liquids -----------------------------------------------------------------
   liquid(Blocks.WATER, "Water", TILE.WATER),

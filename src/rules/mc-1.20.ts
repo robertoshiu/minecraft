@@ -39,6 +39,7 @@ export const Blocks = {
   BIRCH_LEAVES: 26,
   BIRCH_PLANKS: 27,
   BED: 28,
+  BREWING_STAND: 29,
 } as const;
 
 /** A numeric block identifier (one of the values in {@link Blocks}). */
@@ -236,6 +237,7 @@ export const BLOCK_HARDNESS: Partial<Record<BlockId, number>> = {
   [Blocks.GLASS]: 0.3,
   [Blocks.BEDROCK]: Infinity,
   [Blocks.OAK_LEAVES]: 0.2,
+  [Blocks.BREWING_STAND]: 0.5,
 };
 
 // ---------------------------------------------------------------------------

@@ -57,6 +57,7 @@ const TILE_COLORS: Readonly<Record<number, RGB>> = {
   33: [0.28, 0.52, 0.18], // birch_leaves — vivid green
   34: [0.82, 0.74, 0.48], // birch_planks — richer warm pale wood
   35: [0.82, 0.14, 0.16], // bed — vivid warm red
+  36: [0.34, 0.30, 0.26], // brewing_stand — dark stone-brown (blaze-rod stand)
 };
 
 /** Fallback color for unknown tile indices (magenta-ish, easy to spot). */

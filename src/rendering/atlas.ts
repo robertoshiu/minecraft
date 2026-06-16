@@ -109,7 +109,7 @@ const LEAF_TILES = new Set<number>([
 ]);
 
 /** Number of distinct tile indices used by the block registry. */
-const MAX_USED_TILE = 35;
+const MAX_USED_TILE = 36;
 
 // ---------------------------------------------------------------------------
 // Per-texel detail computation

@@ -16,6 +16,7 @@
 import { ChunkColumn } from "../chunk/column";
 import { type BlockId } from "../rules/mc-1.20";
 import { type MobSave } from "../mobs/persistence";
+import { type BrewingStandEntrySave } from "../crafting/brewing-stands";
 
 // ---------------------------------------------------------------------------
 // Public save shapes
@@ -75,6 +76,12 @@ export interface WorldSave {
   player: PlayerSave;
   columns: Record<string, Uint8Array>;
   mobs?: MobSave[];
+  /**
+   * Placed brewing stands + their in-progress contents. Added in save v7 /
+   * container format 7; optional so older saves (which had no brewing
+   * persistence) decode cleanly to `undefined` (treated as []).
+   */
+  brewingStands?: BrewingStandEntrySave[];
 }
 
 // ---------------------------------------------------------------------------
@@ -201,12 +208,14 @@ const SAVE_MAGIC = 0x4d43_5357; // "MCSW" (Minecraft Save World), as a u32
  *  - 4: …plus a length-prefixed equipment slot array at the end of the player record.
  *  - 5: …plus a length-prefixed status-effects array at the end of the player record.
  *  - 6: …plus a single off-hand slot record at the end of the player record.
+ *  - 7: …plus a trailing brewingStands JSON blob.
  * Older containers are still readable (spawn defaults to the player position;
  * equipment defaults to all-null on containers older than format 4;
  * effects default to empty on containers older than format 5;
- * the off-hand defaults to null on containers older than format 6).
+ * the off-hand defaults to null on containers older than format 6;
+ * brewing stands default to [] on containers older than format 7).
  */
-const SAVE_FORMAT = 6;
+const SAVE_FORMAT = 7;
 /** The lowest container format this build can still decode. */
 const SAVE_FORMAT_MIN = 1;
 
@@ -572,6 +581,10 @@ export function serializeSave(save: WorldSave): Uint8Array {
   // Mobs (container format 2+): a length-prefixed UTF-8 JSON array of MobSave.
   w.str(JSON.stringify(save.mobs ?? []));
 
+  // Brewing stands (container format 7+): a length-prefixed UTF-8 JSON array of
+  // BrewingStandEntrySave. Trails the mobs blob so older readers never reach it.
+  w.str(JSON.stringify(save.brewingStands ?? []));
+
   return w.finish();
 }
 
@@ -615,7 +628,17 @@ export function deserializeSave(bytes: Uint8Array): WorldSave {
     mobs = parsed as MobSave[];
   }
 
-  return { version, seed, totalTicks, player, columns, mobs };
+  // Brewing stands trail the mobs blob from container format 7 onward; older
+  // containers have none, so the field is omitted (treated as [] by callers).
+  const result: WorldSave = { version, seed, totalTicks, player, columns, mobs };
+  if (format >= 7) {
+    const parsed: unknown = JSON.parse(r.str());
+    if (!Array.isArray(parsed)) {
+      throw new Error("deserializeSave: brewingStands blob is not a JSON array");
+    }
+    result.brewingStands = parsed as BrewingStandEntrySave[];
+  }
+  return result;
 }
 
 export {

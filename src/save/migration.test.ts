@@ -115,9 +115,15 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     expect(() => migrate(saveAt(0), 1)).toThrow(/did not advance/);
   });
 
-  it("exposes SAVE_VERSION = 6 and a MIGRATIONS registry", () => {
-    expect(SAVE_VERSION).toBe(6);
+  it("exposes SAVE_VERSION = 7 and a MIGRATIONS registry", () => {
+    expect(SAVE_VERSION).toBe(7);
     expect(typeof MIGRATIONS).toBe("object");
+  });
+  it("MIGRATIONS[6] seeds an empty brewingStands list (v6 -> v7)", () => {
+    const v6 = saveAt(6, 99);
+    const v7 = MIGRATIONS[6]!(v6);
+    expect(v7.version).toBe(7);
+    expect(v7.brewingStands).toEqual([]);
   });
 
   it("migrates a v1 save to v2, seeding an empty mob list", () => {

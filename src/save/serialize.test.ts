@@ -309,4 +309,46 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
     const round = deserializeSave(serializeSave(save));
     expect(round.mobs).toEqual([]);
   });
+
+  it("round-trips a populated brewingStands blob (save v7)", () => {
+    const save: WorldSave = {
+      version: 7,
+      seed: 11,
+      totalTicks: 3,
+      player: samplePlayerMin(),
+      columns: {},
+      mobs: [],
+      brewingStands: [
+        {
+          x: 5,
+          y: 64,
+          z: -3,
+          stand: {
+            base: { itemId: Items.WATER_BOTTLE, count: 1, maxStack: 1 },
+            ingredient: { itemId: Items.NETHER_WART, count: 1, maxStack: 64 },
+            fuel: { itemId: Items.BLAZE_POWDER, count: 2, maxStack: 64 },
+            output: null,
+            brewsRemaining: 20,
+            brewProgress: 137,
+          },
+        },
+      ],
+    };
+    const round = deserializeSave(serializeSave(save));
+    expect(round.brewingStands).toEqual(save.brewingStands);
+  });
+
+  it("a save written without brewingStands decodes the field as []", () => {
+    // serializeSave always writes the v7 blob; absent input → [] (not undefined).
+    const save: WorldSave = {
+      version: 7,
+      seed: 0,
+      totalTicks: 0,
+      player: samplePlayerMin(),
+      columns: {},
+      mobs: [],
+    };
+    const round = deserializeSave(serializeSave(save));
+    expect(round.brewingStands).toEqual([]);
+  });
 });

@@ -11,7 +11,7 @@
 import { type WorldSave } from "./serialize";
 
 /** The current on-disk save version this build writes and reads natively. */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 /** Transforms a save from version `k` to version `k+1`. */
 export type Migration = (data: WorldSave) => WorldSave;
@@ -31,6 +31,9 @@ export type Migration = (data: WorldSave) => WorldSave;
  * - `MIGRATIONS[4]` (v4 -> v5): adds the effects array to the player record.
  *   v4 saves predate status-effect persistence, so the list defaults to empty.
  * - `MIGRATIONS[5]` (v5 -> v6): adds the off-hand slot to the player record (defaults to null).
+ * - `MIGRATIONS[6]` (v6 -> v7): adds the world-level brewingStands registry blob.
+ *   v6 saves predate brewing persistence, so the upgrade seeds an empty list
+ *   (mirrors MIGRATIONS[1] seeding an empty mobs list).
  */
 export const MIGRATIONS: Record<number, Migration> = {
   1: (data) => ({ ...data, version: 2, mobs: [] }),
@@ -68,6 +71,7 @@ export const MIGRATIONS: Record<number, Migration> = {
       offhand: null,
     },
   }),
+  6: (data) => ({ ...data, version: 7, brewingStands: [] }),
 };
 
 /**

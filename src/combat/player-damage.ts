@@ -1,5 +1,5 @@
 /**
- * player-damage.ts — the player-side combat chokepoint (Phase 6a).
+ * player-damage.ts — the player-side combat chokepoint (Phase 6a/6b).
  *
  * EXTRACTED from mob-driver.ts so controller.ts can route fall damage through
  * the chokepoint WITHOUT a controller → mob-driver → controller import cycle
@@ -7,12 +7,13 @@
  * would be circular). mob-driver re-exports both functions so its existing
  * tests/imports are unchanged.
  *
- * applyPlayerDamage applies, in order: armor reduction (skipped for fall) →
- * resistance → clamp → i-frame gate → durability wear (skipped for fall) →
+ * applyPlayerDamage applies, in order: armor reduction (skipped for fall/fire) →
+ * resistance → clamp → i-frame gate → durability wear (skipped for fall/fire) →
  * survival damage. `source` defaults to "melee" so pre-Phase-6a call sites are
  * byte-identical. Fall damage (MC-accurate) ignores armor and does not wear it,
- * but still honours Resistance and i-frames. Poison/starvation do NOT pass
- * through here (they write health directly).
+ * but still honours Resistance and i-frames. Fire damage also skips armor and
+ * durability wear, and is FULLY negated (not merely reduced) when fire_resistance
+ * is active. Poison/starvation do NOT pass through here (they write health directly).
  */
 
 import type { Player } from "../player/controller";
@@ -20,12 +21,18 @@ import { damage } from "../survival/stats";
 import { damageTool } from "../inventory/stack";
 import { armorReduction } from "./armor";
 import { isInvulnerable } from "./iframes";
-import { resistanceFraction } from "../effects/status";
+import { resistanceFraction, hasEffect } from "../effects/status";
 import { knockbackImpulse } from "./knockback";
 import { ARMOR_SLOTS } from "../inventory/equipment";
 
-/** Where a hit came from. Drives whether armor (and its wear) applies. */
-export type DamageSource = "melee" | "explosion" | "fall";
+/**
+ * Where a hit came from. Drives whether armor (and its wear) applies.
+ * - "melee" / "explosion": armor reduces damage and wears on hit.
+ * - "fall": skips armor and durability wear; still honours Resistance and i-frames.
+ * - "fire": skips armor and durability wear like fall, AND is FULLY negated
+ *   (not merely reduced) when the fire_resistance effect is active.
+ */
+export type DamageSource = "melee" | "explosion" | "fall" | "fire";
 
 export function applyPlayerDamage(
   player: Player,
@@ -33,7 +40,10 @@ export function applyPlayerDamage(
   currentTick: number,
   source: DamageSource = "melee",
 ): void {
-  const applyArmor = source !== "fall";
+  // Fire is FULLY negated (not merely reduced) when fire_resistance is active.
+  // Keyed on source === "fire" only, so all other sources are byte-identical.
+  if (source === "fire" && hasEffect(player.effects, "fire_resistance")) return;
+  const applyArmor = source !== "fall" && source !== "fire";
   const defense = player.equipment.totalDefense();
   const armored = applyArmor ? armorReduction(rawAmount, defense) : rawAmount;
   const fraction = resistanceFraction(player.effects);

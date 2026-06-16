@@ -52,3 +52,37 @@ describe("applyPlayerKnockback", () => {
     expect(Math.hypot(player.knockbackX, player.knockbackZ)).toBeGreaterThan(0);
   });
 });
+
+describe("applyPlayerDamage fire source (Phase 6b)", () => {
+  it("fire SKIPS armor: full damage lands despite armor, and does not wear it", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    player.equipment.equip("chestplate", makeArmorStack(Items.IRON_CHESTPLATE));
+    const startDur = player.equipment.get("chestplate")!.durability!;
+    applyPlayerDamage(player, 6, 100, "fire");
+    expect(player.survival.health).toBe(14); // full 6, no armor reduction
+    expect(player.equipment.get("chestplate")!.durability).toBe(startDur); // no wear
+  });
+  it("fire is FULLY negated by fire_resistance (zero damage)", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    applyEffect(player.effects, "fire_resistance", 0, 1000);
+    applyPlayerDamage(player, 6, 100, "fire");
+    expect(player.survival.health).toBe(20); // fully negated
+  });
+  it("fire honours i-frames (second hit in window ignored)", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    applyPlayerDamage(player, 6, 100, "fire");
+    expect(player.survival.health).toBe(14);
+    applyPlayerDamage(player, 6, 101, "fire");
+    expect(player.survival.health).toBe(14);
+  });
+  it("fire_resistance does NOT negate non-fire sources (melee still lands)", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    applyEffect(player.effects, "fire_resistance", 0, 1000);
+    applyPlayerDamage(player, 6, 100); // melee
+    expect(player.survival.health).toBe(14);
+  });
+});

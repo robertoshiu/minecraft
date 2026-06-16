@@ -25,7 +25,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
-import { Vector4 } from "@babylonjs/core/Maths/math.vector";
+import { Vector4, Matrix, Vector3, Quaternion } from "@babylonjs/core/Maths/math.vector";
 import { generateMobAtlasRGBA, uvRegion, faceUVForRect, MOB_ATLAS_PX } from "./mob-atlas";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 
@@ -301,9 +301,29 @@ export class MobRenderer {
   /** Records mid death-grace tween (live path only), keyed by mob id. */
   private readonly dyingRecords = new Map<number, { record: MobRecord; startMs: number }>();
 
-  constructor(scene: Scene, shadowSink?: ShadowCasterSink) {
+  /** Escape-hatch: when true, sync() uses the thin-instance path (static pose). */
+  private readonly instanceMode: boolean;
+  /**
+   * One-time capability flag: true until a thin-instance probe call throws.
+   * Set to false by ensureSpeciesBase() if thinInstanceSetMatrixAt is not
+   * supported (e.g. NullEngine variant without thin-instance support).
+   * Per-frame GPU calls (writeInstanceMatrix / hideInstance) are SKIPPED when
+   * false, so real-engine errors propagate instead of being swallowed.
+   */
+  private instanceSupported = true;
+  /** Per-species base mesh (one Mesh per MobType), created lazily in instance mode. */
+  private readonly speciesBase = new Map<MobType, Mesh>();
+  /** Per-mob instance slot: mobId → { type, index } into that species' buffer. */
+  private readonly instanceSlots = new Map<number, { type: MobType; index: number }>();
+  /** Free instance indices per species for slot reuse (despawn → free-list). */
+  private readonly instanceFree = new Map<MobType, number[]>();
+  /** Next fresh instance index per species (grows when the free-list is empty). */
+  private readonly instanceNext = new Map<MobType, number>();
+
+  constructor(scene: Scene, shadowSink?: ShadowCasterSink, instanceMode?: boolean) {
     this.scene = scene;
     this.shadowSink = shadowSink ?? null;
+    this.instanceMode = instanceMode ?? false;
   }
 
   /**
@@ -569,6 +589,20 @@ export class MobRenderer {
    *  - Dispose any record whose mob id is gone (removing from shadow sink first).
    */
   sync(mobs: Mob[], nowMs?: number, currentTick?: number): void {
+    if (this.instanceMode) {
+      this.syncInstanced(mobs);
+      return;
+    }
+    this.syncComposite(mobs, nowMs, currentTick);
+  }
+
+  /**
+   * Composite per-mob model path (DEFAULT). This is the original sync() body,
+   * unchanged: one root TransformNode + pivot-animated part meshes per mob.
+   * mob-renderer.test.ts pins this path (material identity, shadow-sink parity,
+   * root reuse, getMeshCount counts roots).
+   */
+  private syncComposite(mobs: Mob[], nowMs?: number, currentTick?: number): void {
     let dtTicks = 0;
     if (nowMs !== undefined) {
       const prev = this.lastNowMs ?? nowMs;
@@ -676,13 +710,147 @@ export class MobRenderer {
     }
   }
 
+  // ---- Instance path --------------------------------------------------------
+
+  /**
+   * Thin-instance escape hatch (opt-in via instanceMode). Draws every mob of a
+   * species from ONE shared base mesh, writing a per-mob world matrix into the
+   * thin-instance buffer. STATIC POSE: no leg swing / head pitch / tail sway /
+   * idle bob (the documented throughput-for-fidelity trade-off). babyScale is
+   * baked into the matrix scale. Shadow sink: base mesh registered ONCE.
+   */
+  private syncInstanced(mobs: Mob[]): void {
+    const seen = new Set<number>();
+    const dirtySpecies = new Set<MobType>();
+
+    for (const mob of mobs) {
+      seen.add(mob.id);
+      this.ensureSpeciesBase(mob.type);
+      let slot = this.instanceSlots.get(mob.id);
+      if (slot === undefined) {
+        const index = this.allocInstanceIndex(mob.type);
+        slot = { type: mob.type, index };
+        this.instanceSlots.set(mob.id, slot);
+      }
+      this.writeInstanceMatrix(slot.type, slot.index, mob);
+      dirtySpecies.add(slot.type);
+    }
+
+    // Despawn: free slots whose mob is gone (collapse to a zero-scale matrix so
+    // the stale instance is invisible until the index is reused).
+    for (const [id, slot] of this.instanceSlots) {
+      if (seen.has(id)) continue;
+      this.hideInstance(slot.type, slot.index);
+      this.freeInstanceIndex(slot.type, slot.index);
+      this.instanceSlots.delete(id);
+      dirtySpecies.add(slot.type);
+    }
+
+    // Push buffer updates once per touched species.
+    for (const type of dirtySpecies) {
+      const base = this.speciesBase.get(type);
+      base?.thinInstanceBufferUpdated?.("matrix");
+    }
+  }
+
+  /** Create (once) the shared base mesh for a species and register it with the sink. */
+  private ensureSpeciesBase(type: MobType): void {
+    if (this.speciesBase.has(type)) return;
+    // v1: a single body-sized box per species, UV-mapped from the shared atlas.
+    const def = MODELS[type];
+    const first = def.parts[0]!;
+    const faceUV = faceUVForRect(uvRegion(type, "body")).map(
+      (f) => new Vector4(f.x, f.y, f.z, f.w),
+    );
+    const base = CreateBox(
+      `mobinst_${type}`,
+      { width: first.w, height: first.h, depth: first.d, faceUV },
+      this.scene,
+    );
+    base.doNotSyncBoundingInfo = true;
+    base.material = this.materialFor(`${type}:body`);
+    base.receiveShadows = true;
+    // One-time capability probe: if thinInstanceSetMatrixAt throws here, the
+    // engine does not support thin instances. We set instanceSupported=false so
+    // every subsequent per-frame GPU call is SKIPPED (not swallowed), allowing
+    // real errors on supported engines to propagate unmasked.
+    if (this.instanceSupported) {
+      try {
+        base.thinInstanceSetMatrixAt(0, Matrix.Zero(), false);
+        // Collapse the probe slot so it is invisible (zero-scale matrix already
+        // invisible, but set count to 0 to avoid a stray draw).
+        base.thinInstanceCount = 0;
+      } catch {
+        this.instanceSupported = false;
+      }
+    }
+    this.shadowSink?.addShadowCaster(base); // ONCE per species (leak-safe)
+    this.speciesBase.set(type, base);
+    this.instanceFree.set(type, []);
+    this.instanceNext.set(type, 0);
+  }
+
+  /** Allocate an instance index (reuse a freed one, else grow). */
+  private allocInstanceIndex(type: MobType): number {
+    const free = this.instanceFree.get(type)!;
+    const reused = free.pop();
+    if (reused !== undefined) return reused;
+    const next = this.instanceNext.get(type)!;
+    this.instanceNext.set(type, next + 1);
+    return next;
+  }
+
+  /** Return an index to the species' free-list for reuse. */
+  private freeInstanceIndex(type: MobType, index: number): void {
+    this.instanceFree.get(type)!.push(index);
+  }
+
+  /** Compose + write a mob's world matrix (scale·rotateY·translate) into the buffer. */
+  private writeInstanceMatrix(type: MobType, index: number, mob: Mob): void {
+    const base = this.speciesBase.get(type);
+    if (base === undefined) return;
+    const scale = mob.extra["babyScale"] ?? 1.0;
+    const m = Matrix.Compose(
+      new Vector3(scale, scale, scale),
+      Quaternion.RotationYawPitchRoll(mob.yaw, 0, 0),
+      new Vector3(mob.feet.x, mob.feet.y, mob.feet.z),
+    );
+    // GPU calls are UNGUARDED when instanceSupported (real errors propagate).
+    // Skipped when !instanceSupported (engine does not support thin instances).
+    if (this.instanceSupported) {
+      if (base.thinInstanceCount <= index) base.thinInstanceCount = index + 1;
+      base.thinInstanceSetMatrixAt(index, m, false);
+    }
+  }
+
+  /** Collapse an instance to zero scale so a freed slot is invisible. */
+  private hideInstance(type: MobType, index: number): void {
+    const base = this.speciesBase.get(type);
+    if (base === undefined) return;
+    // GPU calls are UNGUARDED when instanceSupported (real errors propagate).
+    if (this.instanceSupported) {
+      base.thinInstanceSetMatrixAt(index, Matrix.Scaling(0, 0, 0), false);
+    }
+  }
+
   // ---- Accessors ------------------------------------------------------------
 
   /**
    * Number of live mob ROOTS currently rendered (not the number of part meshes).
+   * In instance mode, returns the count of live instances instead.
    */
   getMeshCount(): number {
-    return this.records.size;
+    if (this.instanceMode) return this.instanceSlots.size; // live instances
+    return this.records.size; // composite: live roots (test pins this)
+  }
+
+  /**
+   * Read-only accessor for tests and debug: returns the thin-instance buffer
+   * slot index assigned to `mobId`, or `undefined` if the mob is not currently
+   * tracked in instance mode. Does NOT throw; safe to call from any path.
+   */
+  instanceIndexOf(mobId: number): number | undefined {
+    return this.instanceSlots.get(mobId)?.index;
   }
 
   // ---- dispose --------------------------------------------------------------
@@ -705,5 +873,15 @@ export class MobRenderer {
 
     this.flashMat?.dispose();
     this.flashMat = null;
+
+    // Instance path: dispose each species base (removing it from the sink once).
+    for (const base of this.speciesBase.values()) {
+      this.shadowSink?.removeShadowCaster(base);
+      base.dispose();
+    }
+    this.speciesBase.clear();
+    this.instanceSlots.clear();
+    this.instanceFree.clear();
+    this.instanceNext.clear();
   }
 }

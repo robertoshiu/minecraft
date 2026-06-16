@@ -376,6 +376,31 @@ describe("applyPlayerDamage resistance (Phase 5)", () => {
   });
 });
 
+describe("aiTick — mob status effects (Phase 6c)", () => {
+  it("ticks an active poison on a live mob (health drops, never below 1)", () => {
+    // Build the minimal World + MobDriver harness, mirroring the aiTick tests above.
+    const world = new World(2);
+    // Provide a floor so the cow doesn't fall through the world.
+    world.setBlock(0, 63, 0, Blocks.STONE);
+    const driver = new MobDriver(world, new RecordingRenderer());
+
+    const player = new Player({ x: 0.5, y: 64, z: 0.5 });
+    const clock = nightClock();
+
+    // Spawn a cow adjacent to the player and apply a strong, long poison.
+    const cow = driver.manager.spawn("cow", { x: 0.5, y: 64, z: 1.5 });
+    cow.health = 10;
+    applyEffect(cow.effects, "poison", 4, 100000); // high amplifier → fast ticks
+
+    // Run enough ticks to advance past at least one poison interval.
+    for (let t = 0; t < 200; t++) driver.aiTick(player, clock, t);
+
+    // Poison drained health but cannot kill.
+    expect(cow.health).toBeLessThan(10);
+    expect(cow.health).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe("pickMob — baby hitbox (Phase 6c)", () => {
   it("a ray grazing the adult top edge MISSES the baby (smaller box)", () => {
     // Cow adult height = 1.4 → box [feet.y, feet.y+1.4].

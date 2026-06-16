@@ -385,7 +385,7 @@ const NON_BLOCK_DEFS: readonly ItemDef[] = [
   splashPotion(Items.SPLASH_POTION_POISON, "Splash Potion of Poison", "poison", 0, EFFECT_TUNING.DEFAULT_DURATION),
   splashPotion(Items.SPLASH_POTION_HEALING, "Splash Potion of Healing", "instant_health", 0, 0),
 
-  // Tipped arrow: poison on hit (player-only for non-instant; mob deferred).
+  // Tipped arrow: poison on hit — non-instant effects now apply over time to mobs (Phase 6c).
   {
     id: Items.TIPPED_ARROW,
     name: "Tipped Arrow (Poison)",

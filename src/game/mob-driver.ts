@@ -28,6 +28,7 @@ import { applyPlayerDamage, applyPlayerKnockback } from "../combat/player-damage
 import { MobManager } from "../mobs/manager";
 import { Mob, type Vec3 } from "../mobs/entity";
 import { tickPassive, type Rng } from "../mobs/passive-ai";
+import { tickMobEffects } from "../mobs/effects";
 import {
   tickHostile,
   type CombatHooks,
@@ -288,6 +289,10 @@ export class MobDriver {
 
     // Snapshot first: AI may spawn/despawn, and we mutate the manager below.
     for (const mob of this.manager.all()) {
+      // Status effects (poison/regen from tipped arrows / splash potions) tick
+      // first so a poisoned mob's health is current for this tick's death gate.
+      // tickMobEffects is a fast no-op for unaffected mobs.
+      tickMobEffects(mob, currentTick);
       if (mob.isPassive()) {
         tickPassive(mob, this.isSolid, () => Math.random());
       } else {

@@ -12,6 +12,7 @@ import {
   isInstant,
   effectTypeFromId,
   EFFECT_TYPE_IDS,
+  mobEffectAction,
 } from "./status";
 import { makeSurvivalState } from "../survival/stats";
 import { EFFECT_TUNING } from "../rules/mc-1.20";
@@ -185,6 +186,35 @@ describe("type-id mapping (persistence)", () => {
   it("round-trips every roster type through its stable int id", () => {
     for (const [type, id] of Object.entries(EFFECT_TYPE_IDS)) {
       expect(effectTypeFromId(id)).toBe(type);
+    }
+  });
+});
+
+describe("mobEffectAction — splash/arrow routing table (Phase 6c Task 4)", () => {
+  // Pins the flat-vs-DoT trichotomy for every EffectType.
+  // A mutation that maps instant_health → "effect" causes the last assertion
+  // in the "none" test to fail; flipping instant_damage → "effect" fails the
+  // "harm" test; flipping any non-instant to "harm"/"none" fails the "effect" test.
+
+  it('instant_damage → "harm"', () => {
+    expect(mobEffectAction("instant_damage")).toBe("harm");
+  });
+
+  it('instant_health → "none"', () => {
+    expect(mobEffectAction("instant_health")).toBe("none");
+  });
+
+  it('all non-instant types → "effect"', () => {
+    const nonInstant: Parameters<typeof mobEffectAction>[0][] = [
+      "poison",
+      "regeneration",
+      "strength",
+      "swiftness",
+      "resistance",
+      "fire_resistance",
+    ];
+    for (const type of nonInstant) {
+      expect(mobEffectAction(type), `${type} should be "effect"`).toBe("effect");
     }
   });
 });

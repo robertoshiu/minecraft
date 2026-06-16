@@ -92,7 +92,7 @@ import { GameEffects } from "./effects/game-effects";
 import { initPostFX, type PostFXController } from "./rendering/post-fx";
 import { HintManager } from "./ui/hints";
 import { Equipment, ARMOR_SLOTS } from "./inventory/equipment";
-import { tickEffects, swiftnessMultiplier, strengthBonus, applyEffect, applyInstant, isInstant, effectTypeFromId } from "./effects/status";
+import { tickEffects, swiftnessMultiplier, strengthBonus, applyEffect, applyInstant, isInstant, effectTypeFromId, mobEffectAction } from "./effects/status";
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
@@ -1133,11 +1133,16 @@ engine.runRenderLoop(() => {
       );
       if (hit.kind === "mob") {
         attackMob(hit.mob, currentTick, ARROW.DAMAGE, hit.fromXZ);
-        // Tipped arrow: instant effects add bonus damage to the mob. Non-instant
-        // effects require a mob EffectState (deferred to 6c) — ignored here.
+        // Tipped arrow effects (Phase 6c): instant effects add bonus damage;
+        // non-instant effects now apply over time to the mob's EffectState.
         const arrowFx = arrow.potionEffect;
-        if (arrowFx !== undefined && isInstant(arrowFx.type) && arrowFx.type === "instant_damage") {
-          attackMob(hit.mob, currentTick, EFFECT_TUNING.INSTANT_DAMAGE_PER_LEVEL * (arrowFx.amplifier + 1));
+        if (arrowFx !== undefined) {
+          const action = mobEffectAction(arrowFx.type);
+          if (action === "harm") {
+            attackMob(hit.mob, currentTick, EFFECT_TUNING.INSTANT_DAMAGE_PER_LEVEL * (arrowFx.amplifier + 1));
+          } else if (action === "effect") {
+            applyEffect(hit.mob.effects, arrowFx.type, arrowFx.amplifier, arrowFx.durationTicks);
+          }
         }
         gameAudio?.onMobHurt(hit.mob.feet);
       }
@@ -1160,13 +1165,15 @@ engine.runRenderLoop(() => {
           liveMobs,
           SPLASH.RADIUS,
         );
-        // Mobs have no effects channel → plain instant damage on harmful splashes.
         const potFx = potion.effect;
-        const harmful = potFx.type === "instant_damage" || potFx.type === "poison";
-        if (harmful) {
+        const action = mobEffectAction(potFx.type);
+        if (action === "harm") {
           for (const m of hitMobs) attackMob(m, currentTick, SPLASH.MOB_DAMAGE);
+        } else if (action === "effect") {
+          for (const m of hitMobs) applyEffect(m.effects, potFx.type, potFx.amplifier, potFx.durationTicks);
         }
-        // Player in range → apply the real effect (instant or timed).
+        // action === "none" (instant_health) → nothing
+        // Player in range → apply the real effect (instant or timed). Unchanged.
         if (playerInRange) {
           if (isInstant(potFx.type)) {
             applyInstant(player.survival, potFx.type, potFx.amplifier);

@@ -67,6 +67,19 @@ export function isInstant(type: EffectType): boolean {
 }
 
 /**
+ * How a thrown/fired potion effect of `type` should affect a MOB on contact.
+ * - "harm"   = deal flat/bonus instant damage (instant_damage)
+ * - "none"   = no mob interaction (instant_health — beneficial instants don't buff mobs)
+ * - "effect" = apply the effect over time via applyEffect (all non-instant: poison/regen/strength/...)
+ * Single source of the flat-vs-DoT routing for both splash AoE and tipped arrows (Phase 6c Task 4).
+ */
+export function mobEffectAction(type: EffectType): "harm" | "none" | "effect" {
+  if (type === "instant_damage") return "harm";
+  if (type === "instant_health") return "none";
+  return "effect";
+}
+
+/**
  * One active effect on the player.
  * - `amplifier` is 0-based (0 = level I, 1 = level II, …).
  * - `ticksRemaining` counts DOWN; an effect at 0 is expired and removed.

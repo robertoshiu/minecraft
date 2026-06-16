@@ -15,6 +15,7 @@
 import type { Scene } from "@babylonjs/core/scene";
 import type { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import type { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
+import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 
 import type { Clock } from "../time/clock";
@@ -48,7 +49,11 @@ export interface SkyTargets {
  * directional sun intensity + direction, and a dimmer hemispheric ambient at
  * night. Called every render frame.
  */
-export function applySky(targets: SkyTargets, clock: Clock): void {
+export function applySky(
+  targets: SkyTargets,
+  clock: Clock,
+  env?: { texture: BaseTexture; intensity: number },
+): void {
   const tod = tickOfDay(clock);
 
   const [r, g, b] = skyColorAt(tod);
@@ -78,4 +83,12 @@ export function applySky(targets: SkyTargets, clock: Clock): void {
   targets.hemi.intensity =
     HEMI_NIGHT_INTENSITY +
     (HEMI_DAY_INTENSITY - HEMI_NIGHT_INTENSITY) * intensity;
+
+  // Phase 6d (flag-gated, additive): when IBL is active the caller passes an
+  // env texture + a day/night-scaled intensity. Omitted on the default path,
+  // so the OFF look is byte-identical. environmentIntensity is a 0..1 multiplier.
+  if (env !== undefined) {
+    targets.scene.environmentTexture = env.texture;
+    targets.scene.environmentIntensity = Math.max(0, Math.min(1, env.intensity));
+  }
 }

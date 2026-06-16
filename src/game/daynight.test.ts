@@ -125,3 +125,35 @@ describe("golden-hour spawn TOD", () => {
     expect(r).toBeGreaterThan(b);
   });
 });
+
+function makeSkyHarness(): { targets: SkyTargets; clock: ReturnType<typeof makeClock> } {
+  const eng = new NullEngine();
+  const sc = new Scene(eng);
+  sc.clearColor = new Color4(0, 0, 0, 1);
+  const s = new DirectionalLight("sun", new Vector3(0, -1, 0), sc);
+  const h = new HemisphericLight("hemi", new Vector3(0, 1, 0), sc);
+  return { targets: { scene: sc, sun: s, hemi: h }, clock: makeClock(10000) };
+}
+
+describe("applySky — IBL env wiring (Phase 6d)", () => {
+  it("sets environmentTexture + clamped environmentIntensity when env is passed", () => {
+    const { targets: t, clock } = makeSkyHarness();
+    const fakeTex = {} as unknown as import("@babylonjs/core/Materials/Textures/baseTexture").BaseTexture;
+    applySky(t, clock, { texture: fakeTex, intensity: 0.4 });
+    expect(t.scene.environmentTexture).toBe(fakeTex);
+    expect(t.scene.environmentIntensity).toBeCloseTo(0.4, 10);
+  });
+
+  it("clamps an out-of-range env intensity into [0,1]", () => {
+    const { targets: t, clock } = makeSkyHarness();
+    const fakeTex = {} as unknown as import("@babylonjs/core/Materials/Textures/baseTexture").BaseTexture;
+    applySky(t, clock, { texture: fakeTex, intensity: 9 });
+    expect(t.scene.environmentIntensity).toBe(1);
+  });
+
+  it("leaves environmentTexture null when env is omitted (default path)", () => {
+    const { targets: t, clock } = makeSkyHarness();
+    applySky(t, clock); // no env arg
+    expect(t.scene.environmentTexture).toBeNull();
+  });
+});

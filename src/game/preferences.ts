@@ -11,6 +11,15 @@
 import { atomicWrite, safeRead, type SaveStore } from "../save/store";
 import { type ColorblindMode } from "../ui/a11y";
 
+/** Tone-mapping / color-grade mode (Phase 6c A/B toggle). */
+export type ToneMappingMode = "goldenHour" | "neutral";
+
+/** All valid tone-mapping modes (used to validate persisted prefs). */
+export const VALID_TONE_MAPPING_MODES: ReadonlyArray<ToneMappingMode> = [
+  "goldenHour",
+  "neutral",
+];
+
 /** All user-adjustable settings. */
 export interface Prefs {
   /** View distance in chunk columns (2..6). */
@@ -33,6 +42,8 @@ export interface Prefs {
   filmGrainEnabled: boolean;
   /** Colorblind ore-color compensation mode. */
   colorblindMode: ColorblindMode;
+  /** Tone-mapping / color grade (Phase 6c). Persisted; live-applied to post-FX. */
+  toneMappingMode: ToneMappingMode;
   /** UI scale multiplier (0.5..2.0). */
   uiScale: number;
 }
@@ -49,6 +60,7 @@ export const DEFAULT_PREFS: Prefs = {
   ssaoEnabled: true,
   filmGrainEnabled: true,
   colorblindMode: "none",
+  toneMappingMode: "goldenHour",
   uiScale: 1.0,
 };
 
@@ -86,6 +98,9 @@ export function clampPrefs(p: Prefs): Prefs {
     colorblindMode: VALID_COLORBLIND_MODES.includes(p.colorblindMode)
       ? p.colorblindMode
       : DEFAULT_PREFS.colorblindMode,
+    toneMappingMode: VALID_TONE_MAPPING_MODES.includes(p.toneMappingMode)
+      ? p.toneMappingMode
+      : DEFAULT_PREFS.toneMappingMode,
     uiScale: clampField(p.uiScale, 0.5, 2.0, DEFAULT_PREFS.uiScale),
   };
 }
@@ -134,6 +149,11 @@ export function parsePrefs(bytes: Uint8Array): Prefs {
     colorblindRaw === "tritanopia"
       ? (colorblindRaw as ColorblindMode)
       : DEFAULT_PREFS.colorblindMode;
+  const toneRaw = obj["toneMappingMode"];
+  const toneMappingMode: ToneMappingMode =
+    toneRaw === "goldenHour" || toneRaw === "neutral"
+      ? (toneRaw as ToneMappingMode)
+      : DEFAULT_PREFS.toneMappingMode;
   return clampPrefs({
     renderDistance: numOrDefault("renderDistance", DEFAULT_PREFS.renderDistance),
     fov: numOrDefault("fov", DEFAULT_PREFS.fov),
@@ -145,6 +165,7 @@ export function parsePrefs(bytes: Uint8Array): Prefs {
     ssaoEnabled: boolOrDefault("ssaoEnabled", DEFAULT_PREFS.ssaoEnabled),
     filmGrainEnabled: boolOrDefault("filmGrainEnabled", DEFAULT_PREFS.filmGrainEnabled),
     colorblindMode,
+    toneMappingMode,
     uiScale: numOrDefault("uiScale", DEFAULT_PREFS.uiScale),
   });
 }

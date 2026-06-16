@@ -8,6 +8,9 @@ import {
   savePrefs,
   type Prefs,
 } from "./preferences";
+// NOTE: ToneMappingMode and VALID_TONE_MAPPING_MODES are exported from preferences.ts
+// but not imported here — the tests below use DEFAULT_PREFS / clampPrefs / parsePrefs
+// directly, which is sufficient to exercise the tone-mapping behaviour.
 import { MemoryStore } from "../save/store";
 
 describe("clampPrefs", () => {
@@ -116,5 +119,34 @@ describe("loadPrefs / savePrefs (MemoryStore)", () => {
     await savePrefs(store, p);
     const loaded = await loadPrefs(store);
     expect(loaded).toEqual(p);
+  });
+});
+
+describe("preferences — toneMappingMode (Phase 6c)", () => {
+  it("defaults to goldenHour", () => {
+    expect(DEFAULT_PREFS.toneMappingMode).toBe("goldenHour");
+  });
+
+  it("clampPrefs keeps a valid mode and falls back on an unknown one", () => {
+    const valid = clampPrefs({ ...DEFAULT_PREFS, toneMappingMode: "neutral" });
+    expect(valid.toneMappingMode).toBe("neutral");
+    const bogus = clampPrefs({
+      ...DEFAULT_PREFS,
+      toneMappingMode: "rainbow" as never,
+    });
+    expect(bogus.toneMappingMode).toBe("goldenHour");
+  });
+
+  it("round-trips through serialize/parse", () => {
+    const p = clampPrefs({ ...DEFAULT_PREFS, toneMappingMode: "neutral" });
+    const back = parsePrefs(serializePrefs(p));
+    expect(back.toneMappingMode).toBe("neutral");
+  });
+
+  it("an old prefs blob without toneMappingMode defaults to goldenHour", () => {
+    const legacy = { ...DEFAULT_PREFS } as Record<string, unknown>;
+    delete legacy["toneMappingMode"];
+    const bytes = new TextEncoder().encode(JSON.stringify(legacy));
+    expect(parsePrefs(bytes).toneMappingMode).toBe("goldenHour");
   });
 });

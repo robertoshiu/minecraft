@@ -19,6 +19,8 @@
   --hp-empty: #3a2020;
   --hunger-full: #b07830;
   --hunger-empty: #2e2418;
+  --armor-full: #5090c0;   /* derived from --info; calm blue = defense/protection */
+  --armor-empty: #1a2535;  /* dark desaturated blue — mirrors --hp-empty pattern */
   --day-indicator: #f0c860;
 
   --slot-border: #3a3d45;
@@ -196,6 +198,60 @@ body {
     var(--hunger-full) 0 50%,
     var(--hunger-empty) 50% 100%
   );
+}
+
+/* ------------------------------------------------------------- armor bar */
+
+#armor-bar {
+  position: absolute;
+  bottom: 84px; /* 4px above health/hunger bars (bottom: 64px + 16px height + 4px gap) */
+  left: 16px;
+  display: flex;
+  gap: 2px;
+}
+
+.shield {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--armor-full);
+}
+
+.shield.empty {
+  background: var(--armor-empty);
+}
+
+.shield.half {
+  background: linear-gradient(
+    to right,
+    var(--armor-full) 0 50%,
+    var(--armor-empty) 50% 100%
+  );
+}
+
+/* ------------------------------------------------------------ effect bar */
+
+#effect-bar {
+  position: absolute;
+  top: 60px; /* below FPS (top:16px ~29px) + render-diag (top:36px ~17px) with 6px gap */
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.effect-badge {
+  padding: 3px 8px;
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 /* ------------------------------------------------------------- day counter */

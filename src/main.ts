@@ -39,6 +39,7 @@ import { breakTicks } from "./interaction/mining";
 import { getItemDef, Items } from "./rules/items";
 import { updateHotbarHud } from "./ui/hotbar-hud";
 import { updateSurvivalHud } from "./ui/survival-hud";
+import { updateArmorHud } from "./ui/armor-hud";
 import { isTool, damageTool } from "./inventory/stack";
 import { Inventory } from "./inventory/inventory";
 import { makeDefaultInventory } from "./inventory/default-inventory";
@@ -1116,6 +1117,7 @@ engine.runRenderLoop(() => {
 
   updateHotbarHud(player.inventory, player.hotbar);
   updateSurvivalHud(player.survival, clock);
+  updateArmorHud(player.equipment, player.effects);
 
   if (!firstFrameRendered) {
     firstFrameRendered = true;

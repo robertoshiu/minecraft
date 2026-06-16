@@ -6,6 +6,7 @@
  */
 
 import type { Vec3 } from "../mobs/entity";
+import type { EffectType } from "../effects/status";
 import { Arrow } from "./entity";
 import { ARROW_CAP } from "../rules/mc-1.20";
 
@@ -21,9 +22,14 @@ export class ArrowManager {
   private nextId = 1;
 
   /** Spawn an arrow; returns it. Caller must gate on canFireArrow() first. */
-  spawn(origin: Vec3, velocity: Vec3, shooterId = -1): Arrow {
+  spawn(
+    origin: Vec3,
+    velocity: Vec3,
+    shooterId = -1,
+    tippedEffect?: { type: EffectType; amplifier: number; durationTicks: number },
+  ): Arrow {
     const id = this.nextId++;
-    const arrow = new Arrow(id, origin, velocity, shooterId);
+    const arrow = new Arrow(id, origin, velocity, shooterId, tippedEffect);
     this.arrows.set(id, arrow);
     return arrow;
   }

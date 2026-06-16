@@ -9,6 +9,7 @@
 
 import type { Vec3 } from "../mobs/entity";
 import { ARROW } from "../rules/mc-1.20";
+import type { EffectType } from "../effects/status";
 
 export const ARROW_WIDTH = ARROW.WIDTH;
 export const ARROW_LENGTH = ARROW.LENGTH;
@@ -28,8 +29,19 @@ export class Arrow {
   readonly shooterId: number;
   /** Age in ticks since spawn (drives the MAX_AGE despawn). */
   age: number;
+  /**
+   * Optional tipped-arrow effect applied on a mob hit (Phase 6b). undefined for
+   * a plain arrow. Adding it OPTIONAL keeps the entity shape back-compatible.
+   */
+  readonly potionEffect?: { type: EffectType; amplifier: number; durationTicks: number };
 
-  constructor(id: number, origin: Vec3, velocity: Vec3, shooterId = -1) {
+  constructor(
+    id: number,
+    origin: Vec3,
+    velocity: Vec3,
+    shooterId = -1,
+    potionEffect?: { type: EffectType; amplifier: number; durationTicks: number },
+  ) {
     this.id = id;
     this.feet = { x: origin.x, y: origin.y, z: origin.z };
     this.velocity = { x: velocity.x, y: velocity.y, z: velocity.z };
@@ -37,6 +49,9 @@ export class Arrow {
     this.hitMob = false;
     this.shooterId = shooterId;
     this.age = 0;
+    if (potionEffect !== undefined) {
+      (this as { potionEffect?: typeof potionEffect }).potionEffect = potionEffect;
+    }
   }
 
   /** True once the arrow should be removed from the manager. */

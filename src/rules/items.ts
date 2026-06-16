@@ -57,6 +57,10 @@ export interface ItemDef {
   armorSlot?: ArmorSlot;
   /** Effect applied when drunk (potions only). `durationTicks` is ignored for instants. */
   potionEffect?: { type: EffectType; amplifier: number; durationTicks: number };
+  /** True for THROWN splash potions (kind stays "potion"; thrown, not drunk). */
+  isSplash?: boolean;
+  /** Effect a tipped arrow delivers on hit (tipped-arrow items only). */
+  arrowEffect?: { type: EffectType; amplifier: number; durationTicks: number };
 }
 
 /**
@@ -148,6 +152,15 @@ export const Items = {
   NETHER_WART: NON_BLOCK_BASE + 71,
   BLAZE_ROD: NON_BLOCK_BASE + 72,
   BLAZE_POWDER: NON_BLOCK_BASE + 73,
+
+  // Splash potions (Phase 6b). Thrown; burst applies the effect in a radius.
+  SPLASH_POTION_HARMING: NON_BLOCK_BASE + 74,
+  SPLASH_POTION_POISON: NON_BLOCK_BASE + 75,
+  SPLASH_POTION_HEALING: NON_BLOCK_BASE + 76,
+
+  // Tipped arrow (Phase 6b). Carries an effect applied on hit (instant → mob
+  // damage bonus; non-instant → player only, mob effects deferred to 6c).
+  TIPPED_ARROW: NON_BLOCK_BASE + 77,
 } as const;
 
 /** Default stack size for ordinary (non-tool) items. */
@@ -206,6 +219,16 @@ function potion(
     kind: "potion",
     potionEffect: { type, amplifier, durationTicks },
   };
+}
+
+function splashPotion(
+  id: ItemId,
+  name: string,
+  type: EffectType,
+  amplifier: number,
+  durationTicks: number,
+): ItemDef {
+  return { ...potion(id, name, type, amplifier, durationTicks), isSplash: true };
 }
 
 function blockItem(id: BlockId, name: string): ItemDef {
@@ -356,6 +379,20 @@ const NON_BLOCK_DEFS: readonly ItemDef[] = [
   material(Items.NETHER_WART, "Nether Wart"),
   material(Items.BLAZE_ROD, "Blaze Rod"),
   material(Items.BLAZE_POWDER, "Blaze Powder"),
+
+  // Splash potions (thrown). instant_damage / poison / instant_health.
+  splashPotion(Items.SPLASH_POTION_HARMING, "Splash Potion of Harming", "instant_damage", 0, 0),
+  splashPotion(Items.SPLASH_POTION_POISON, "Splash Potion of Poison", "poison", 0, EFFECT_TUNING.DEFAULT_DURATION),
+  splashPotion(Items.SPLASH_POTION_HEALING, "Splash Potion of Healing", "instant_health", 0, 0),
+
+  // Tipped arrow: poison on hit (player-only for non-instant; mob deferred).
+  {
+    id: Items.TIPPED_ARROW,
+    name: "Tipped Arrow (Poison)",
+    maxStack: 64,
+    kind: "material",
+    arrowEffect: { type: "poison", amplifier: 0, durationTicks: EFFECT_TUNING.DEFAULT_DURATION },
+  },
 ];
 
 /** Block items whose max stack differs from the default 64. */
@@ -467,4 +504,16 @@ export function potionEffectOf(
   const def = getItemDef(id);
   if (def.kind !== "potion" || def.potionEffect === undefined) return null;
   return def.potionEffect;
+}
+
+/** True iff this potion is a THROWN splash potion (vs a drinkable one). */
+export function isSplashPotion(id: ItemId): boolean {
+  return getItemDef(id).isSplash === true;
+}
+
+/** The effect a tipped arrow delivers on hit, or null for plain arrows. */
+export function arrowEffectOf(
+  id: ItemId,
+): { type: EffectType; amplifier: number; durationTicks: number } | null {
+  return getItemDef(id).arrowEffect ?? null;
 }

@@ -21,6 +21,8 @@
 
 import { Mob, type AiState, type Vec3 } from "./entity";
 import type { MobType } from "../rules/mob-stats";
+import { type EffectState, applyEffect, effectTypeFromId, EFFECT_TYPE_IDS } from "../effects/status";
+import type { EffectSave } from "../save/serialize";
 
 /** The set of valid {@link AiState} strings, used to validate decoded data. */
 const AI_STATES: readonly AiState[] = [
@@ -54,6 +56,13 @@ export interface MobSave {
   inLove: boolean;
   fuseTimer: number;
   extra: Record<string, number>;
+  /**
+   * Active status effects (Phase 6c). Same EffectSave shape the player uses
+   * ({type,amplifier,ticksRemaining}). OPTIONAL: omitted entirely when the mob
+   * has none (and absent on pre-v8 blobs) → restored as no effects. periodTimer
+   * is scratch and is NOT saved (reset to 0 on load).
+   */
+  effects?: EffectSave[];
 }
 
 /** Coerce a decoded `aiState` string back to a valid {@link AiState}. */
@@ -71,9 +80,18 @@ function copyExtra(extra: Record<string, number>): Record<string, number> {
   return out;
 }
 
+/** Flatten a mob's EffectState into save shape (3 ints each; periodTimer dropped). */
+function snapshotMobEffects(effects: EffectState): EffectSave[] {
+  return effects.list.map((e) => ({
+    type: EFFECT_TYPE_IDS[e.type],
+    amplifier: e.amplifier,
+    ticksRemaining: e.ticksRemaining,
+  }));
+}
+
 /** Snapshot a single live {@link Mob} into a plain {@link MobSave}. */
 export function toMobSave(mob: Mob): MobSave {
-  return {
+  const save: MobSave = {
     id: mob.id,
     type: mob.type,
     x: mob.feet.x,
@@ -92,6 +110,9 @@ export function toMobSave(mob: Mob): MobSave {
     fuseTimer: mob.fuseTimer,
     extra: copyExtra(mob.extra),
   };
+  const fx = snapshotMobEffects(mob.effects);
+  if (fx.length > 0) save.effects = fx; // omit the key entirely when empty
+  return save;
 }
 
 /** Snapshot a list of live mobs. */
@@ -117,6 +138,13 @@ export function fromMobSave(s: MobSave): Mob {
   mob.inLove = s.inLove;
   mob.fuseTimer = s.fuseTimer;
   mob.extra = copyExtra(s.extra);
+  // Restore active effects (Phase 6c). Missing on pre-v8 blobs → none.
+  for (const fx of s.effects ?? []) {
+    const type = effectTypeFromId(fx.type);
+    if (type === null) continue; // unknown id → skip (forward-compat)
+    // applyEffect re-creates the ActiveEffect with periodTimer=0 (scratch reset).
+    applyEffect(mob.effects, type, fx.amplifier, fx.ticksRemaining);
+  }
   return mob;
 }
 

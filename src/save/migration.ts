@@ -11,7 +11,7 @@
 import { type WorldSave } from "./serialize";
 
 /** The current on-disk save version this build writes and reads natively. */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** Transforms a save from version `k` to version `k+1`. */
 export type Migration = (data: WorldSave) => WorldSave;
@@ -34,6 +34,10 @@ export type Migration = (data: WorldSave) => WorldSave;
  * - `MIGRATIONS[6]` (v6 -> v7): adds the world-level brewingStands registry blob.
  *   v6 saves predate brewing persistence, so the upgrade seeds an empty list
  *   (mirrors MIGRATIONS[1] seeding an empty mobs list).
+ * - `MIGRATIONS[7]` (v7 -> v8): adds per-mob status effects (Phase 6c). The
+ *   mob blob is JSON, so the field defaults inside fromMobSave; this step only
+ *   bumps the version (mirrors how player effects defaulted via fromMobSave on
+ *   older player records). No structural change to the WorldSave object.
  */
 export const MIGRATIONS: Record<number, Migration> = {
   1: (data) => ({ ...data, version: 2, mobs: [] }),
@@ -72,6 +76,7 @@ export const MIGRATIONS: Record<number, Migration> = {
     },
   }),
   6: (data) => ({ ...data, version: 7, brewingStands: [] }),
+  7: (data) => ({ ...data, version: 8 }),
 };
 
 /**

@@ -579,6 +579,9 @@ export function serializeSave(save: WorldSave): Uint8Array {
   }
 
   // Mobs (container format 2+): a length-prefixed UTF-8 JSON array of MobSave.
+  // MobSave gained an additive `effects` array in save VERSION 8 (Phase 6c);
+  // because the blob is JSON, no container-FORMAT bump is needed — pre-v8 mob
+  // objects simply lack the field and decode to no effects.
   w.str(JSON.stringify(save.mobs ?? []));
 
   // Brewing stands (container format 7+): a length-prefixed UTF-8 JSON array of

@@ -9,6 +9,7 @@ import {
   decodeMobs,
   type MobSave,
 } from "./persistence";
+import { applyEffect } from "../effects/status";
 
 /** A passive cow with breeding state and a custom `extra` field set. */
 function makeCow(): Mob {
@@ -187,5 +188,31 @@ describe("encodeMobs / decodeMobs (byte round-trip)", () => {
   it("throws on bytes that are not a JSON array", () => {
     const bogus = new TextEncoder().encode('{"not":"an array"}');
     expect(() => decodeMobs(bogus)).toThrow();
+  });
+});
+
+describe("toMobSave / fromMobSave — status effects (Phase 6c)", () => {
+  it("round-trips a mob's active effects with periodTimer reset to 0", () => {
+    const mob = new Mob(1, "cow", { x: 0, y: 64, z: 0 });
+    applyEffect(mob.effects, "poison", 1, 200);
+    applyEffect(mob.effects, "regeneration", 0, 400);
+    // Advance the timers so periodTimer is non-zero before saving.
+    mob.effects.list[0]!.periodTimer = 7;
+
+    const restored = fromMobSave(toMobSave(mob));
+    expect(restored.effects.list).toHaveLength(2);
+    const poison = restored.effects.list.find((e) => e.type === "poison")!;
+    expect(poison.amplifier).toBe(1);
+    expect(poison.ticksRemaining).toBe(200);
+    expect(poison.periodTimer).toBe(0); // scratch reset on load
+  });
+
+  it("a no-effect mob omits the effects key and decodes to no effects", () => {
+    const mob = new Mob(2, "pig", { x: 0, y: 0, z: 0 }); // no effects applied
+    const save = toMobSave(mob);
+    // toMobSave omits the optional key entirely when empty (pre-v8-blob shape).
+    expect(save.effects).toBeUndefined();
+    const restored = fromMobSave(save);
+    expect(restored.effects.list).toEqual([]);
   });
 });

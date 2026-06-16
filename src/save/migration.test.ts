@@ -115,8 +115,8 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     expect(() => migrate(saveAt(0), 1)).toThrow(/did not advance/);
   });
 
-  it("exposes SAVE_VERSION = 7 and a MIGRATIONS registry", () => {
-    expect(SAVE_VERSION).toBe(7);
+  it("exposes SAVE_VERSION = 8 and a MIGRATIONS registry", () => {
+    expect(SAVE_VERSION).toBe(8);
     expect(typeof MIGRATIONS).toBe("object");
   });
   it("MIGRATIONS[6] seeds an empty brewingStands list (v6 -> v7)", () => {
@@ -124,6 +124,12 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     const v7 = MIGRATIONS[6]!(v6);
     expect(v7.version).toBe(7);
     expect(v7.brewingStands).toEqual([]);
+  });
+  it("MIGRATIONS[7] bumps v7 -> v8, preserving fields (mob effects default in fromMobSave)", () => {
+    const v7 = saveAt(7, 55);
+    const v8 = MIGRATIONS[7]!(v7);
+    expect(v8.version).toBe(8);
+    expect(v8.seed).toBe(55);
   });
 
   it("migrates a v1 save to v2, seeding an empty mob list", () => {

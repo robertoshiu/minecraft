@@ -422,6 +422,9 @@ function restoreFromSave(save: Awaited<ReturnType<typeof loadGame>>): void {
     }
   }
 
+  // Off-hand carry slot (save v6+; older saves migrate to null).
+  player.equipment.setOffhand(p.offhand == null ? null : { ...p.offhand });
+
   // Live mobs (save v2+; absent on older saves → empty list).
   mobDriver.manager.load(deserializeMobs(save.mobs ?? []));
 
@@ -627,6 +630,18 @@ window.addEventListener("keydown", (e) => {
     if (n >= 1 && n <= 9) player.hotbar.select(n - 1);
     return;
   }
+
+  // F swaps the held hotbar item with the off-hand (MC's off-hand key). The
+  // off-hand holds ANY item, so this bypasses Equipment.slotFor entirely.
+  if (e.code === "KeyF") {
+    const slot = player.hotbar.selected;
+    const main = player.inventory.get(slot);
+    const off = player.equipment.getOffhand();
+    player.inventory.set(slot, off);
+    player.equipment.setOffhand(main);
+    return;
+  }
+
   setKey(e.code, true);
 });
 window.addEventListener("keyup", (e) => {

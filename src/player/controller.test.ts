@@ -122,3 +122,42 @@ it("update applies an optional speed multiplier (Swiftness hook)", () => {
   const fastDist = Math.hypot(fast.feet.x, fast.feet.z);
   expect(fastDist).toBeGreaterThan(baseDist);
 });
+
+describe("Player.update — knockback channel", () => {
+  it("an applied impulse moves the player on XZ, then decays to zero", () => {
+    const world = flatFloor(63);
+    const player = new Player({ x: 0, y: 64, z: 0 });
+    for (let i = 0; i < 5; i++) player.update(noInput(), 0, world); // settle on floor
+    const startX = player.feet.x;
+    player.knockbackX = 0.4; // inject impulse (as applyPlayerKnockback would)
+    player.update(noInput(), 0, world);
+    expect(player.feet.x).toBeGreaterThan(startX); // pushed +X this tick
+    for (let i = 0; i < 10; i++) player.update(noInput(), 0, world);
+    expect(player.knockbackX).toBe(0); // decayed + snapped to 0
+  });
+  it("no impulse → movement is unchanged (knockback defaults to 0)", () => {
+    const world = flatFloor(63);
+    const a = new Player({ x: 0, y: 64, z: 0 });
+    const b = new Player({ x: 0, y: 64, z: 0 });
+    const input = { ...noInput(), forward: true };
+    for (let i = 0; i < 20; i++) {
+      a.update(input, 0, world);
+      b.update(input, 0, world);
+    }
+    expect(a.feet.x).toBeCloseTo(b.feet.x, 10);
+    expect(a.feet.z).toBeCloseTo(b.feet.z, 10);
+  });
+  it("respawn zeroes the knockback channel", () => {
+    const player = new Player({ x: 0, y: 64, z: 0 });
+    player.knockbackX = 0.4;
+    player.knockbackZ = -0.4;
+    player.respawn({ x: 0, y: 64, z: 0 });
+    expect(player.knockbackX).toBe(0);
+    expect(player.knockbackZ).toBe(0);
+  });
+  it("update still works with no currentTick arg (fall i-frame sentinel)", () => {
+    const world = flatFloor(63);
+    const player = new Player({ x: 0, y: 64, z: 0 });
+    expect(() => player.update(noInput(), 0, world)).not.toThrow();
+  });
+});

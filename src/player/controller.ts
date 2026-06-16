@@ -56,6 +56,10 @@ export interface InputState {
 
 /** Vertical offset from feet to the camera/eye (Minecraft player eye height). */
 const EYE_HEIGHT = 1.62;
+/** Per-tick decay of the player's horizontal knockback channel (mirrors mobs). */
+const KNOCKBACK_DECAY = 0.5;
+/** Below this magnitude the knockback channel snaps to 0. */
+const KNOCKBACK_EPSILON = 0.01;
 
 /**
  * Grounded first-person player. `feet` is the swept-AABB reference point
@@ -149,6 +153,17 @@ export class Player {
       hz = worldZ * perTick;
     }
 
+    // --- Knockback channel: add the decaying impulse to the horizontal move,
+    // then decay it (mirrors mobs/physics.ts). The upward component was already
+    // written to physics.vy by applyPlayerKnockback and rides the vertical
+    // integrator below.
+    hx += this.knockbackX;
+    hz += this.knockbackZ;
+    this.knockbackX *= KNOCKBACK_DECAY;
+    this.knockbackZ *= KNOCKBACK_DECAY;
+    if (Math.abs(this.knockbackX) < KNOCKBACK_EPSILON) this.knockbackX = 0;
+    if (Math.abs(this.knockbackZ) < KNOCKBACK_EPSILON) this.knockbackZ = 0;
+
     // --- Vertical: jump gating + per-tick velocity integration -------------
     if (input.jump) {
       // A successful jump adds jump exhaustion (sprint-jumps cost more).
@@ -230,6 +245,8 @@ export class Player {
     this.physics = makePhysicsState();
     this.survival = makeSurvivalState();
     this.effects.list.length = 0;
+    this.knockbackX = 0;
+    this.knockbackZ = 0;
   }
 }
 

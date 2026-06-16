@@ -64,6 +64,58 @@ export const DEFAULT_CC_SHADOWS_HUE = 200;
 export const DEFAULT_CC_SHADOWS_DENSITY = 12;
 
 // ---------------------------------------------------------------------------
+// Tone-mapping A/B modes (Phase 6c). ACES stays constant; only the grade
+// (exposure / contrast / ColorCurves) varies per mode. `goldenHour` is the
+// shipped default and reuses the DEFAULT_* constants so the design-spec pins
+// remain the single source of truth.
+// ---------------------------------------------------------------------------
+
+/** A color-grade definition applied on top of the constant ACES tone-mapper. */
+export interface ToneGrade {
+  exposure: number;
+  contrast: number;
+  cc: {
+    globalHue: number;
+    globalSaturation: number;
+    globalExposure: number;
+    shadowsHue: number;
+    shadowsDensity: number;
+  };
+}
+
+/** Valid tone-mapping modes (kept in sync with preferences.ToneMappingMode). */
+export type ToneMappingMode = "goldenHour" | "neutral";
+
+/** The shipped grade modes. Frozen so a caller can never mutate them in place. */
+export const TONE_MODES: Readonly<Record<ToneMappingMode, ToneGrade>> = {
+  // Golden Hour = exactly the current shipped grade (design-spec values).
+  goldenHour: Object.freeze({
+    exposure: DEFAULT_EXPOSURE,
+    contrast: DEFAULT_CONTRAST,
+    cc: Object.freeze({
+      globalHue: DEFAULT_CC_GLOBAL_HUE,
+      globalSaturation: DEFAULT_CC_GLOBAL_SATURATION,
+      globalExposure: DEFAULT_CC_GLOBAL_EXPOSURE,
+      shadowsHue: DEFAULT_CC_SHADOWS_HUE,
+      shadowsDensity: DEFAULT_CC_SHADOWS_DENSITY,
+    }),
+  }),
+  // Neutral = flatter/cooler A/B comparison: no warm lift, no saturation push,
+  // no cool-shadow tint, slightly lower exposure + contrast. Clearly distinct.
+  neutral: Object.freeze({
+    exposure: 0.98,
+    contrast: 1.02,
+    cc: Object.freeze({
+      globalHue: 0,
+      globalSaturation: 0,
+      globalExposure: 0,
+      shadowsHue: 0,
+      shadowsDensity: 0,
+    }),
+  }),
+} as const;
+
+// ---------------------------------------------------------------------------
 // PostFXController interface — exported for consumers and tests.
 // ---------------------------------------------------------------------------
 
@@ -81,8 +133,17 @@ export interface PostFXController {
   setSSAOIntensity(value: number): void;
   /** Set film grain intensity (Babylon units; 0..100). */
   setFilmGrainIntensity(value: number): void;
+  /** Apply a tone-mapping / color-grade mode (Phase 6c). ACES stays constant. */
+  setToneMappingMode(mode: ToneMappingMode): void;
   /** Release all GPU resources held by the pipelines. */
   dispose(): void;
+  /**
+   * Read-only accessor for the live ImageProcessingPostProcess applied by the
+   * pipeline. Returns null when the pipeline failed to construct (graceful-
+   * degradation path). Intended for live-apply verification in tests; do not
+   * mutate the returned object directly — use setToneMappingMode instead.
+   */
+  readonly imageProcessing: import("@babylonjs/core/PostProcesses/imageProcessingPostProcess").ImageProcessingPostProcess | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +156,15 @@ class PostFXControllerImpl implements PostFXController {
 
   constructor(pipeline: DefaultRenderingPipeline | null) {
     this._pipeline = pipeline;
+  }
+
+  /**
+   * Live ImageProcessingConfiguration from the pipeline — null when the
+   * pipeline failed to construct. Read-only accessor for test seams; do not
+   * mutate directly.
+   */
+  get imageProcessing() {
+    return this._pipeline !== null ? this._pipeline.imageProcessing : null;
   }
 
   setBloomEnabled(enabled: boolean): void {
@@ -123,6 +193,22 @@ class PostFXControllerImpl implements PostFXController {
   setFilmGrainIntensity(value: number): void {
     if (this._pipeline === null) return;
     this._pipeline.grain.intensity = value;
+  }
+
+  setToneMappingMode(mode: ToneMappingMode): void {
+    if (this._pipeline === null) return;
+    const grade = TONE_MODES[mode];
+    const ip = this._pipeline.imageProcessing;
+    ip.exposure = grade.exposure;
+    ip.contrast = grade.contrast;
+    // Fresh ColorCurves each change — never mutate the prior one in place.
+    const cc = new ColorCurves();
+    cc.globalHue = grade.cc.globalHue;
+    cc.globalSaturation = grade.cc.globalSaturation;
+    cc.globalExposure = grade.cc.globalExposure;
+    cc.shadowsHue = grade.cc.shadowsHue;
+    cc.shadowsDensity = grade.cc.shadowsDensity;
+    ip.colorCurves = cc;
   }
 
   dispose(): void {
@@ -180,12 +266,15 @@ export function initPostFX(scene: Scene, camera: Camera): PostFXController {
     p.imageProcessing.contrast = DEFAULT_CONTRAST;
     // Golden-hour grade on the existing pass (no new render target).
     p.imageProcessing.colorCurvesEnabled = true;
+    // Apply the default grade (goldenHour) via TONE_MODES so init and
+    // setToneMappingMode share one code path / one source of truth.
+    const grade = TONE_MODES.goldenHour;
     const cc = new ColorCurves();
-    cc.globalHue = DEFAULT_CC_GLOBAL_HUE;
-    cc.globalSaturation = DEFAULT_CC_GLOBAL_SATURATION;
-    cc.globalExposure = DEFAULT_CC_GLOBAL_EXPOSURE;
-    cc.shadowsHue = DEFAULT_CC_SHADOWS_HUE;
-    cc.shadowsDensity = DEFAULT_CC_SHADOWS_DENSITY;
+    cc.globalHue = grade.cc.globalHue;
+    cc.globalSaturation = grade.cc.globalSaturation;
+    cc.globalExposure = grade.cc.globalExposure;
+    cc.shadowsHue = grade.cc.shadowsHue;
+    cc.shadowsDensity = grade.cc.shadowsDensity;
     p.imageProcessing.colorCurves = cc;
     p.fxaaEnabled = false;
     p.sharpenEnabled = false;

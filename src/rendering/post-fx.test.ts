@@ -28,7 +28,9 @@ import {
   DEFAULT_EXPOSURE,
   DEFAULT_CONTRAST,
   DEFAULT_CC_GLOBAL_SATURATION,
+  TONE_MODES,
   type PostFXController,
+  type ToneMappingMode,
 } from "./post-fx";
 
 // ---------------------------------------------------------------------------
@@ -49,16 +51,19 @@ function makeMockController(): PostFXController & {
     setBloomIntensity: [],
     setSSAOIntensity: [],
     setFilmGrainIntensity: [],
+    setToneMappingMode: [],
     dispose: [],
   };
   return {
     calls,
+    imageProcessing: null, // mock — no real pipeline
     setBloomEnabled(enabled: boolean) { calls["setBloomEnabled"]!.push([enabled]); },
     setSSAOEnabled(enabled: boolean) { calls["setSSAOEnabled"]!.push([enabled]); },
     setFilmGrainEnabled(enabled: boolean) { calls["setFilmGrainEnabled"]!.push([enabled]); },
     setBloomIntensity(value: number) { calls["setBloomIntensity"]!.push([value]); },
     setSSAOIntensity(value: number) { calls["setSSAOIntensity"]!.push([value]); },
     setFilmGrainIntensity(value: number) { calls["setFilmGrainIntensity"]!.push([value]); },
+    setToneMappingMode(mode: ToneMappingMode) { calls["setToneMappingMode"]!.push([mode]); },
     dispose() { calls["dispose"]!.push([]); },
   };
 }
@@ -142,6 +147,7 @@ describe("initPostFX", () => {
     expect(typeof ctrl.setBloomIntensity).toBe("function");
     expect(typeof ctrl.setSSAOIntensity).toBe("function");
     expect(typeof ctrl.setFilmGrainIntensity).toBe("function");
+    expect(typeof ctrl.setToneMappingMode).toBe("function");
     expect(typeof ctrl.dispose).toBe("function");
   });
 
@@ -253,6 +259,7 @@ describe("PostFXController interface (mock)", () => {
     ctrl.setBloomIntensity(0.3);
     ctrl.setSSAOIntensity(0.4);
     ctrl.setFilmGrainIntensity(2);
+    ctrl.setToneMappingMode("neutral");
     ctrl.dispose();
 
     expect(ctrl.calls["setBloomEnabled"]).toEqual([[true]]);
@@ -261,6 +268,7 @@ describe("PostFXController interface (mock)", () => {
     expect(ctrl.calls["setBloomIntensity"]).toEqual([[0.3]]);
     expect(ctrl.calls["setSSAOIntensity"]).toEqual([[0.4]]);
     expect(ctrl.calls["setFilmGrainIntensity"]).toEqual([[2]]);
+    expect(ctrl.calls["setToneMappingMode"]).toEqual([["neutral"]]);
     expect(ctrl.calls["dispose"]).toHaveLength(1);
   });
 });
@@ -332,5 +340,72 @@ describe("initPostFX graceful degradation", () => {
     expect(() => { ctrl?.dispose(); }).not.toThrow();
 
     warnSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setToneMappingMode — Phase 6c A/B grade toggle
+// ---------------------------------------------------------------------------
+
+describe("PostFXController.setToneMappingMode", () => {
+  it("does not throw for either mode", () => {
+    const ctrl = initPostFX(scene, camera);
+    expect(() => { ctrl.setToneMappingMode("goldenHour"); }).not.toThrow();
+    expect(() => { ctrl.setToneMappingMode("neutral"); }).not.toThrow();
+    ctrl.dispose();
+  });
+
+  it("goldenHour grade equals the design-spec defaults (single source of truth)", () => {
+    expect(TONE_MODES.goldenHour.exposure).toBe(DEFAULT_EXPOSURE);
+    expect(TONE_MODES.goldenHour.contrast).toBe(DEFAULT_CONTRAST);
+    expect(TONE_MODES.goldenHour.cc.globalSaturation).toBe(DEFAULT_CC_GLOBAL_SATURATION);
+  });
+
+  it("neutral grade is distinct from goldenHour", () => {
+    expect(TONE_MODES.neutral.cc.globalSaturation).not.toBe(
+      TONE_MODES.goldenHour.cc.globalSaturation,
+    );
+  });
+
+  it("switching to neutral then back to goldenHour APPLIES the grade to the live pipeline (genuinely differential)", () => {
+    // This test reads applied pipeline state — it MUST fail if setToneMappingMode
+    // ignores its mode argument (Mutation A).
+    const ctrl = initPostFX(scene, camera);
+    const ip = ctrl.imageProcessing;
+    // Skip if pipeline didn't construct (e.g. fully headless env without NullEngine support).
+    if (ip === null) { ctrl.dispose(); return; }
+
+    // --- Switch to neutral ---
+    ctrl.setToneMappingMode("neutral");
+    expect(ip.exposure).toBe(TONE_MODES.neutral.exposure);          // 0.98
+    expect(ip.contrast).toBe(TONE_MODES.neutral.contrast);          // 1.02
+    expect(ip.colorCurves!.globalSaturation).toBe(
+      TONE_MODES.neutral.cc.globalSaturation,                        // 0
+    );
+
+    // --- Round-trip: back to goldenHour must fully restore every grade param ---
+    ctrl.setToneMappingMode("goldenHour");
+    expect(ip.exposure).toBe(DEFAULT_EXPOSURE);                      // 1.07
+    expect(ip.contrast).toBe(DEFAULT_CONTRAST);                      // 1.10
+    expect(ip.colorCurves!.globalSaturation).toBe(
+      DEFAULT_CC_GLOBAL_SATURATION,                                  // 12
+    );
+
+    ctrl.dispose();
+  });
+
+  // NOTE: The null-pipeline guard in setToneMappingMode (`if (_pipeline === null) return`)
+  // is defensive-only. Under NullEngine, DefaultRenderingPipeline always constructs
+  // successfully, so _pipeline is never null post-init. PostFXControllerImpl._pipeline is
+  // also `readonly`, so it cannot be nulled by dispose(). The null branch is not reachable
+  // through the public API in a headless test environment and is therefore not testable
+  // without mocking internals. The smoke test below only confirms no throw (no regression),
+  // not that the null branch was exercised.
+
+  it("mock controller records setToneMappingMode calls", () => {
+    const ctrl = makeMockController();
+    ctrl.setToneMappingMode("goldenHour");
+    ctrl.setToneMappingMode("neutral");
+    expect(ctrl.calls["setToneMappingMode"]).toEqual([["goldenHour"], ["neutral"]]);
   });
 });

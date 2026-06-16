@@ -316,6 +316,18 @@ export const FIRE = {
   DAMAGE_INTERVAL: 10,
 } as const;
 
+// ---------------------------------------------------------------------------
+// Brewing (Phase 6b)
+// ---------------------------------------------------------------------------
+
+/** Brewing-stand tuning (20 TPS). */
+export const BREW = {
+  /** Ticks to complete one brew (20 s — slower than smelting, MC-flavored). */
+  TICKS_PER_BREW: 400,
+  /** Brews one unit of blaze powder fuels (MC: 20). */
+  BREWS_PER_BLAZE_POWDER: 20,
+} as const;
+
 export const FUEL_VALUES: Record<string, number> = {
   coal: 8,
   coal_block: 80,

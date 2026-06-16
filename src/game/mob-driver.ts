@@ -25,6 +25,7 @@ import { makeStack, damageTool } from "../inventory/stack";
 import type { ItemDef, ToolTier } from "../rules/items";
 import { armorReduction } from "../combat/armor";
 import { isInvulnerable } from "../combat/iframes";
+import { resistanceFraction } from "../effects/status";
 import { knockbackImpulse } from "../combat/knockback";
 import { ARMOR_SLOTS } from "../inventory/equipment";
 
@@ -522,7 +523,12 @@ export function applyPlayerDamage(
   currentTick: number,
 ): void {
   const defense = player.equipment.totalDefense();
-  const effective = armorReduction(rawAmount, defense);
+  const armored = armorReduction(rawAmount, defense);
+  // Resistance stage (Phase 5): armor → resistance → clamp. Rounds to the
+  // integer half-heart economy. resistanceFraction is 0 when no Resistance
+  // effect is active, so this is a no-op for the pinned no-effect tests.
+  const fraction = resistanceFraction(player.effects);
+  const effective = fraction > 0 ? Math.max(0, Math.round(armored * (1 - fraction))) : armored;
   if (effective <= 0) return; // fully absorbed — no health loss, no durability wear
   // i-frames: ignore hits within the immunity window of the last real hit.
   if (isInvulnerable(player.survival.lastDamageTick, currentTick)) return;

@@ -108,3 +108,17 @@ describe("Player.eyePosition", () => {
     expect(eye.z).toBeCloseTo(2);
   });
 });
+
+it("update applies an optional speed multiplier (Swiftness hook)", () => {
+  const world = flatFloor(63); // real World; floor top at y=64
+  const input = { ...noInput(), forward: true }; // copy the file's InputState shape
+  const base = new Player({ x: 0, y: 65, z: 0 });
+  const fast = new Player({ x: 0, y: 65, z: 0 });
+  for (let i = 0; i < 20; i++) {
+    base.update(input, 0, world);
+    fast.update(input, 0, world, 1.5);
+  }
+  const baseDist = Math.hypot(base.feet.x, base.feet.z);
+  const fastDist = Math.hypot(fast.feet.x, fast.feet.z);
+  expect(fastDist).toBeGreaterThan(baseDist);
+});

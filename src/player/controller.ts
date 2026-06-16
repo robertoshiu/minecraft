@@ -100,7 +100,12 @@ export class Player {
    * @param yaw   camera yaw (radians) — forward maps to -Z rotated by yaw.
    * @param world the world to collide against (via {@link World.isSolidAt}).
    */
-  update(input: InputState, yaw: number, world: World): void {
+  update(
+    input: InputState,
+    yaw: number,
+    world: World,
+    speedMultiplier: number = 1,
+  ): void {
     const wasOnGround = this.physics.onGround;
 
     // --- Horizontal desired velocity (blocks/tick) -------------------------
@@ -127,7 +132,8 @@ export class Player {
       const worldX = nx * cos + nz * sin;
       const worldZ = -nx * sin + nz * cos;
 
-      const speed = sprinting ? PHYSICS.SPRINT_SPEED : PHYSICS.WALK_SPEED;
+      const baseSpeed = sprinting ? PHYSICS.SPRINT_SPEED : PHYSICS.WALK_SPEED;
+      const speed = baseSpeed * speedMultiplier;
       const perTick = speed / TICKS_PER_SECOND;
       hx = worldX * perTick;
       hz = worldZ * perTick;

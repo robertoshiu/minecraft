@@ -18,6 +18,7 @@ import {
 } from "./mob-driver";
 import { getItemDef, Items } from "../rules/items";
 import { makeStack, makeArmorStack } from "../inventory/stack";
+import { applyEffect } from "../effects/status";
 
 /** A renderer stub that records every blockChanged call. */
 class RecordingRenderer implements RemeshNotifier {
@@ -348,5 +349,27 @@ describe("attackMob knockback", () => {
     attackMob(mob, 1);
     expect(mob.knockback.x).toBe(0);
     expect(mob.knockback.z).toBe(0);
+  });
+});
+
+describe("applyPlayerDamage resistance (Phase 5)", () => {
+  it("resistance reduces post-armor damage (armor → resistance → clamp)", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    // No armor; Resistance I → 20% off → 6 × 0.8 = 4.8 → 5.
+    applyEffect(player.effects, "resistance", 0, 1000);
+    applyPlayerDamage(player, 6, 100);
+    expect(player.survival.health).toBe(15);
+  });
+  it("a resistance-reduced-to-zero hit costs no health AND no durability", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    player.equipment.equip("chestplate", makeArmorStack(Items.IRON_CHESTPLATE));
+    const startDur = player.equipment.get("chestplate")!.durability!;
+    // Resistance IV → 80% off. A 1-damage hit after armor → round(≤1 × 0.2)=0.
+    applyEffect(player.effects, "resistance", 3, 1000);
+    applyPlayerDamage(player, 1, 100);
+    expect(player.survival.health).toBe(20);
+    expect(player.equipment.get("chestplate")!.durability).toBe(startDur);
   });
 });

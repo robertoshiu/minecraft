@@ -78,7 +78,7 @@ import { GameEffects } from "./effects/game-effects";
 import { initPostFX, type PostFXController } from "./rendering/post-fx";
 import { HintManager } from "./ui/hints";
 import { Equipment, ARMOR_SLOTS } from "./inventory/equipment";
-import { tickEffects } from "./effects/status";
+import { tickEffects, swiftnessMultiplier, strengthBonus } from "./effects/status";
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
@@ -690,10 +690,12 @@ function handleClick(button: number): void {
         const slot = player.hotbar.selected;
         const held = player.inventory.get(slot);
         const heldDef = held === null ? null : getItemDef(held.itemId);
-        attackMob(mob, clock.totalTicks, attackDamageFor(heldDef), {
-          x: eye.x,
-          z: eye.z,
-        });
+        attackMob(
+          mob,
+          clock.totalTicks,
+          attackDamageFor(heldDef) + strengthBonus(player.effects),
+          { x: eye.x, z: eye.z },
+        );
         // Play hurt sound at mob position.
         gameAudio?.onMobHurt(mob.feet);
         if (held !== null && isTool(held)) {
@@ -914,7 +916,12 @@ engine.runRenderLoop(() => {
       }
     }
 
-    player.update(input, camera.rotation.y, world);
+    player.update(
+        input,
+        camera.rotation.y,
+        world,
+        swiftnessMultiplier(player.effects),
+      );
     advance(clock, 1);
     // Mobs advance on the same fixed tick. currentTick is the clock's monotonic
     // counter (post-advance), shared by spawn gating, AI, and combat timing.

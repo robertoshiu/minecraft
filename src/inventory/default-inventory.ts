@@ -35,5 +35,25 @@ export function makeDefaultInventory(): Inventory {
   inv.set(15, makeStack(Items.POTION_HEALING, 1, 1));
   inv.set(16, makeStack(Items.POTION_STRENGTH, 1, 1));
   inv.set(17, makeStack(Items.POTION_SWIFTNESS, 1, 1));
+  // Brewing machinery + ingredients (Phase 6b) — seed so the feature is
+  // reachable in play and Task-13 live-QA prerequisites are satisfied.
+  inv.set(18, makeStack(Blocks.BREWING_STAND, 4));
+  inv.set(19, makeStack(Items.WATER_BOTTLE, 8));
+  inv.set(20, makeStack(Items.NETHER_WART, 8));
+  inv.set(21, makeStack(Items.BLAZE_POWDER, 8));
+  inv.set(22, makeStack(Items.BLAZE_ROD, 4));
+  inv.set(23, makeStack(Items.GLASS_BOTTLE, 8));
+  // Splash potions (Phase 6b) — maxStack:1, so one per slot.
+  inv.set(24, makeStack(Items.SPLASH_POTION_POISON, 1, 1));
+  inv.set(25, makeStack(Items.SPLASH_POTION_POISON, 1, 1));
+  inv.set(26, makeStack(Items.SPLASH_POTION_POISON, 1, 1));
+  inv.set(27, makeStack(Items.SPLASH_POTION_HARMING, 1, 1));
+  inv.set(28, makeStack(Items.SPLASH_POTION_HARMING, 1, 1));
+  inv.set(29, makeStack(Items.SPLASH_POTION_HARMING, 1, 1));
+  inv.set(30, makeStack(Items.SPLASH_POTION_HEALING, 1, 1));
+  inv.set(31, makeStack(Items.SPLASH_POTION_HEALING, 1, 1));
+  inv.set(32, makeStack(Items.SPLASH_POTION_HEALING, 1, 1));
+  // Tipped arrows (Phase 6b) — stackable material, 16 in one slot.
+  inv.set(33, makeStack(Items.TIPPED_ARROW, 16));
   return inv;
 }

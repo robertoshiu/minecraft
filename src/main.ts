@@ -78,7 +78,7 @@ import { GameEffects } from "./effects/game-effects";
 import { initPostFX, type PostFXController } from "./rendering/post-fx";
 import { HintManager } from "./ui/hints";
 import { Equipment, ARMOR_SLOTS } from "./inventory/equipment";
-import { tickEffects, swiftnessMultiplier, strengthBonus, applyEffect, applyInstant, isInstant } from "./effects/status";
+import { tickEffects, swiftnessMultiplier, strengthBonus, applyEffect, applyInstant, isInstant, effectTypeFromId } from "./effects/status";
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
@@ -397,6 +397,20 @@ function restoreFromSave(save: Awaited<ReturnType<typeof loadGame>>): void {
     const slot = eq[i] ?? null;
     player.equipment.set(armorSlot, slot === null ? null : { ...slot });
   });
+
+  // Active status effects (save v5+; older saves migrate to []).
+  player.effects.list.length = 0;
+  for (const fx of p.effects ?? []) {
+    const type = effectTypeFromId(fx.type);
+    if (type !== null) {
+      player.effects.list.push({
+        type,
+        amplifier: fx.amplifier,
+        ticksRemaining: fx.ticksRemaining,
+        periodTimer: 0,
+      });
+    }
+  }
 
   // Live mobs (save v2+; absent on older saves → empty list).
   mobDriver.manager.load(deserializeMobs(save.mobs ?? []));

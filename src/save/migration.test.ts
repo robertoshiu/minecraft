@@ -23,6 +23,7 @@ function emptyPlayer(): PlayerSave {
     spawnY: 0,
     spawnZ: 0,
     equipment: [],
+    effects: [],
   };
 }
 
@@ -113,8 +114,8 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     expect(() => migrate(saveAt(0), 1)).toThrow(/did not advance/);
   });
 
-  it("exposes SAVE_VERSION = 4 and a MIGRATIONS registry", () => {
-    expect(SAVE_VERSION).toBe(4);
+  it("exposes SAVE_VERSION = 5 and a MIGRATIONS registry", () => {
+    expect(SAVE_VERSION).toBe(5);
     expect(typeof MIGRATIONS).toBe("object");
   });
 
@@ -148,5 +149,12 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     const out = step(v3);
     expect(out.version).toBe(4);
     expect(out.player.equipment).toEqual([null, null, null, null]);
+  });
+
+  it("MIGRATIONS[4] adds an empty effects array (v4 → v5)", () => {
+    const v4 = saveAt(4, 42);
+    const out = MIGRATIONS[4]!(v4);
+    expect(out.version).toBe(5);
+    expect(out.player.effects).toEqual([]);
   });
 });

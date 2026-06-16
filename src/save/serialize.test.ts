@@ -120,6 +120,10 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
         null,
         { itemId: Items.LEATHER_BOOTS, count: 1, maxStack: 1 },
       ],
+      effects: [
+        { type: 5, amplifier: 1, ticksRemaining: 600 }, // strength II
+        { type: 0, amplifier: 0, ticksRemaining: 200 }, // regeneration I
+      ],
     };
   }
 
@@ -156,6 +160,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
 
     expect(round.player.inventory).toEqual(player.inventory);
     expect(round.player.equipment).toEqual(player.equipment);
+    expect(round.player.effects).toEqual(player.effects);
 
     // The tool slot specifically retains durability + maxDurability.
     const tool = round.player.inventory[2];
@@ -223,6 +228,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
         spawnY: 0,
         spawnZ: 0,
         equipment: [],
+        effects: [],
       },
       columns: {},
     };
@@ -247,6 +253,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
       spawnY: 64,
       spawnZ: 0,
       equipment: [],
+      effects: [],
     };
   }
 

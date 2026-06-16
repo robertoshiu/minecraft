@@ -20,12 +20,14 @@ import {
   type WorldSave,
   type PlayerSave,
   type ItemStackSave,
+  type EffectSave,
 } from "../save/serialize";
 import { migrate, SAVE_VERSION } from "../save/migration";
 import { atomicWrite, safeRead, type SaveStore } from "../save/store";
 import { serializeMobs } from "../mobs/persistence";
 import type { MobManager } from "../mobs/manager";
 import { type Equipment, ARMOR_SLOTS } from "../inventory/equipment";
+import { EFFECT_TYPE_IDS } from "../effects/status";
 
 /** The canonical key the single-world save lives under in the store. */
 export const SAVE_KEY = "world";
@@ -48,6 +50,15 @@ function toItemSave(stack: ItemStack): ItemStackSave {
     save.maxDurability = stack.maxDurability;
   }
   return save;
+}
+
+/** Snapshot the player's active status effects into save shape (3 ints each). */
+function snapshotEffects(player: Player): EffectSave[] {
+  return player.effects.list.map((e) => ({
+    type: EFFECT_TYPE_IDS[e.type],
+    amplifier: e.amplifier,
+    ticksRemaining: e.ticksRemaining,
+  }));
 }
 
 /** Snapshot the 4 armor slots [helmet, chestplate, leggings, boots] into save shape. */
@@ -97,6 +108,7 @@ export function buildWorldSave(
     spawnY: sp.y,
     spawnZ: sp.z,
     equipment: snapshotEquipment(player.equipment),
+    effects: snapshotEffects(player),
   };
 
   const columns: Record<string, Uint8Array> = {};

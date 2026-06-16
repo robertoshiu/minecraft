@@ -39,6 +39,8 @@ export interface PlayerSave {
   spawnZ: number;
   /** Worn armor [helmet, chestplate, leggings, boots]. Added in save v4; default all-null. */
   equipment: (ItemStackSave | null)[];
+  /** Active status effects. Added in save v5; absent in older saves (migrated with []). */
+  effects: EffectSave[];
 }
 
 /** A single inventory slot's item. Tools carry durability; most items don't. */
@@ -48,6 +50,13 @@ export interface ItemStackSave {
   maxStack: number;
   durability?: number;
   maxDurability?: number;
+}
+
+/** A persisted status effect (Phase 5). 3×i32; no presence flag (never null). */
+export interface EffectSave {
+  type: number;
+  amplifier: number;
+  ticksRemaining: number;
 }
 
 /**
@@ -188,10 +197,12 @@ const SAVE_MAGIC = 0x4d43_5357; // "MCSW" (Minecraft Save World), as a u32
  *  - 2: …plus a trailing length-prefixed JSON {@link MobSave}[] blob.
  *  - 3: …plus spawnX/spawnY/spawnZ (f64×3) appended at the end of the player record.
  *  - 4: …plus a length-prefixed equipment slot array at the end of the player record.
+ *  - 5: …plus a length-prefixed status-effects array at the end of the player record.
  * Older containers are still readable (spawn defaults to the player position;
- * equipment defaults to all-null on containers older than format 4).
+ * equipment defaults to all-null on containers older than format 4;
+ * effects default to empty on containers older than format 5).
  */
-const SAVE_FORMAT = 4;
+const SAVE_FORMAT = 5;
 /** The lowest container format this build can still decode. */
 const SAVE_FORMAT_MIN = 1;
 
@@ -386,6 +397,14 @@ function writePlayer(w: ByteWriter, p: PlayerSave): void {
       w.u8(DURABILITY_ABSENT);
     }
   }
+
+  // Status effects (added in container format 5). 3×i32 each; length-prefixed.
+  w.u32(p.effects.length);
+  for (const fx of p.effects) {
+    w.i32(fx.type);
+    w.i32(fx.amplifier);
+    w.i32(fx.ticksRemaining);
+  }
 }
 
 function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
@@ -456,6 +475,18 @@ function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
     }
   }
 
+  // Effects (added in container format 5). Older containers → empty list.
+  const effects: EffectSave[] = [];
+  if (containerFormat >= 5) {
+    const fxCount = r.u32();
+    for (let i = 0; i < fxCount; i++) {
+      const type = r.i32();
+      const amplifier = r.i32();
+      const ticksRemaining = r.i32();
+      effects.push({ type, amplifier, ticksRemaining });
+    }
+  }
+
   return {
     x,
     y,
@@ -471,6 +502,7 @@ function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
     spawnY,
     spawnZ,
     equipment,
+    effects,
   };
 }
 

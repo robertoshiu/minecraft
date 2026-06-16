@@ -247,3 +247,60 @@ The current build uses these color tokens in `src/styles/hud.css` (subset of the
 **PBR atlas art is deferred.** The current build uses vertex-color rendering (flat block colors from the block palette) as a sanctioned placeholder. All PBR material, IBL, shadow, and atlas work (plan Waves 2.6, 2.8) is not yet implemented. When PBR is added, it must follow the emissive table and roughness values above exactly.
 
 Font loading (Inter / Space Grotesk / JetBrains Mono) is deferred. The current build uses `system-ui` as a fallback. Font integration must self-host WOFF2 files in `assets/fonts/` to comply with the COOP/COEP requirement (G19).
+
+---
+
+## PBR + IBL Terrain (Phase 6d, flag-gated, default OFF)
+
+### Status: Opt-in experimental capability. The design-locked golden-hour look is unchanged.
+
+The shipped default (`USE_PBR_TERRAIN = false` in `src/rendering/terrain-material.ts`) is **byte-identical** to the golden-hour StandardMaterial path described above — no `scene.environmentTexture`, no PBR material, no new shader. The flag is a compile-time `export const`; flipping it does not alter `SAVE_VERSION` (stays at 8) or any game logic.
+
+### What the ON path does
+
+When `USE_PBR_TERRAIN = true`:
+
+- **Material path.** `createTerrainMaterials` returns a `PBRMaterial` opaque/transparent pair (instead of `StandardMaterial`) that reuses the **same albedo atlas RawTexture**. The `PbrAtlasMaterialPlugin` injects the identical per-vertex tile lookup + `faceShade` + contact-AO into Babylon's `CUSTOM_FRAGMENT_UPDATE_ALBEDO` point (writing `surfaceAlbedo`), so chunk geometry (`chunk-mesh.ts`) is unchanged. Key material parameters: `metallic = 0` (all terrain is non-metal), `roughness = PBR_TERRAIN_ROUGHNESS = 0.78` (uniform, matte Minecraft voxel look). Per-type roughness is a follow-up, not v1.
+- **IBL path.** A procedural gradient cubemap (`createEnvironmentCubemap` in `src/rendering/environment-cubemap.ts`) is constructed once at boot and wired to `scene.environmentTexture`. The six faces approximate a warm golden-hour sky (+X warm amber, −X cool blue, +Y bright sky, −Y dark warm floor, ±Z neutral blend) so IBL adds soft sky-tinted fill on shadowed faces and a faint warm sheen on top faces — ADDITIVE on top of the existing sun/hemi/CSM, not a replacement. `scene.environmentIntensity` is set per frame to `sunLightIntensityAt(tod) × prefs.pbrIntensity` so IBL dims to near-zero at midnight and never double-brightens the scene at noon.
+- **Tone mapping.** The Phase-6c ACES `ImageProcessingPostProcess` + `goldenHour`/`neutral` grades are unchanged. PBR output feeds the same downstream pass.
+
+### Tuning knobs
+
+| Knob | Location | Default | Direction |
+|---|---|---|---|
+| `PBR_TERRAIN_ROUGHNESS` | `src/rendering/terrain-material.ts` | `0.78` | Raise toward 0.85–0.9 if stone looks shiny; lower toward 0.7 if flat/dead |
+| `pbrIntensity` pref | `src/game/preferences.ts` `DEFAULT_PREFS` | `0.5` | Lower if noon blows out with IBL on; 0..1 range, persisted |
+| IBL face colors | `src/rendering/environment-cubemap.ts` `FACE_*` constants | warm golden-hour gradient | Adjust for different sky moods; pure function, fully unit-testable |
+
+### Open follow-up items (out of 6d scope)
+
+- Per-type roughness (stone vs grass vs wood vs water) — v1 is uniform roughness only.
+- CC0 HDRI environment (e.g. Poly Haven) vs procedural gradient — procedural is the default-OFF safe path.
+- Per-material `environmentIntensity` opt-out for mobs/arrows/splash (StandardMaterials) — only if IBL makes them look egregious with the flag ON.
+
+### How to enable for local QA
+
+1. Open `src/rendering/terrain-material.ts` and change `export const USE_PBR_TERRAIN = false;` to `true`.
+2. Run `corepack pnpm build` (or `corepack pnpm dev`).
+3. Launch the game. Evaluate the checklist below.
+4. **Revert the flag to `false` before committing.**
+
+### Live-QA checklist (real GPU only — not asserted in CI)
+
+These items are human-verified on a real GPU. NullEngine / CI cannot evaluate visual quality or pixel identity. Work through them in order with `USE_PBR_TERRAIN = true` (except item 1, which uses the default `false`).
+
+1. **OFF-path byte-identity (the design-lock).** With the repo default (`USE_PBR_TERRAIN = false`), launch and screenshot at spawn (TOD 10000 golden hour). The result must be **pixel-identical** to the shipped golden-hour reference: warm 5200K sun, cool hemi fill, per-face `faceShade` brightness (top 1.0 / bottom 0.5 / Z 0.8 / X 0.6), gentle contact-AO (≤10%, skipped on top), sharp CSM shadows, ACES `goldenHour` grade. Verify `scene.environmentTexture === null` via the test-api `renderDiag` console output.
+
+2. **ON-path PBR aesthetics.** With the flag ON, launch at TOD 10000. Stone must read **matte, not metallic or shiny**. Grass must be matte, not plastic. Wood must keep warmth from the atlas. Water/glass may show only a **subtle sheen** (roughness 0.78 is well into the matte range). The atlas tile colors + `faceShade` per-face brightness + contact-AO must still be clearly readable. If stone looks shiny, raise `PBR_TERRAIN_ROUGHNESS` toward 0.85–0.9 and rebuild. If it looks flat/dead, lower toward 0.7.
+
+3. **IBL day/night sweep.** Use the test-api `setTime(tod)` to sweep TOD. IBL must **add** soft sky-tinted fill on shadowed faces + a faint warm top sheen **without replacing** the sun/hemi (sun remains dominant, hemi still fills). Key checkpoints: noon (TOD 6000) must **not** blow out; dusk must not go flat; midnight (TOD 18000) must go dark (env intensity dims to ~0 because `sunLightIntensityAt` returns ~0 at night). If noon blows out, lower `DEFAULT_PREFS.pbrIntensity` below 0.5 or cap the per-frame intensity ceiling, and record the chosen value.
+
+4. **CSM + tone interaction.** With the flag ON, sweep TOD and confirm CSM shadows stay **crisp and acne-free** under PBR (no normal map is added in v1 so acne risk is low, but verify). Toggle the Phase-6c tone modes (`goldenHour` ↔ `neutral`) and confirm the ACES + grade pass still controls the final composite over PBR output — no color banding, grade still applies cleanly on top of PBR.
+
+5. **Global-material check (mobs/arrows/splash).** With the flag ON, `scene.environmentTexture` is global and affects **all** scene materials including mob and projectile StandardMaterials. Confirm they do not look wrong under the added IBL. Minor tinting is acceptable; egregious color shift or blown-out mobs warrants a follow-up `environmentIntensity` opt-out on those materials (out of 6d scope — note any finding and open a follow-up item, do not fix in this branch unless truly egregious).
+
+6. **Boot-with-flag-ON smoke test.** Launch fresh with `USE_PBR_TERRAIN = true`. Confirm there is **no black screen, no console throw** (the `createEnvironmentCubemap` try/catch should handle any GPU failure gracefully, degrading to no-IBL rather than crashing). After confirming a clean boot, **revert `USE_PBR_TERRAIN` to `false`** before pushing.
+
+### Verdict (to be filled in after live QA)
+
+> _Not yet evaluated. The flag remains `false` (default-OFF capability). A reviewer performing live QA should update this section with: tuned `PBR_TERRAIN_ROUGHNESS`, tuned `pbrIntensity`, any egregious material issues found, and the decision to ship ON or keep as a default-OFF experiment._

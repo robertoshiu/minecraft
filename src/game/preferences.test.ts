@@ -150,3 +150,26 @@ describe("preferences — toneMappingMode (Phase 6c)", () => {
     expect(parsePrefs(bytes).toneMappingMode).toBe("goldenHour");
   });
 });
+
+describe("pbrIntensity preference (Phase 6d)", () => {
+  it("defaults to 0.5", () => {
+    expect(DEFAULT_PREFS.pbrIntensity).toBe(0.5);
+  });
+
+  it("clamps out-of-range values to [0,1]", () => {
+    expect(clampPrefs({ ...DEFAULT_PREFS, pbrIntensity: 5 }).pbrIntensity).toBe(1);
+    expect(clampPrefs({ ...DEFAULT_PREFS, pbrIntensity: -2 }).pbrIntensity).toBe(0);
+    expect(clampPrefs({ ...DEFAULT_PREFS, pbrIntensity: Number.NaN }).pbrIntensity).toBe(0.5);
+  });
+
+  it("round-trips through serialize/parse", () => {
+    const p = clampPrefs({ ...DEFAULT_PREFS, pbrIntensity: 0.3 });
+    const round = parsePrefs(serializePrefs(p));
+    expect(round.pbrIntensity).toBeCloseTo(0.3, 10);
+  });
+
+  it("defaults a missing field from an old prefs blob", () => {
+    const oldBlob = new TextEncoder().encode(JSON.stringify({ fov: 90 }));
+    expect(parsePrefs(oldBlob).pbrIntensity).toBe(0.5);
+  });
+});

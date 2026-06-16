@@ -44,6 +44,12 @@ export interface Prefs {
   colorblindMode: ColorblindMode;
   /** Tone-mapping / color grade (Phase 6c). Persisted; live-applied to post-FX. */
   toneMappingMode: ToneMappingMode;
+  /**
+   * IBL environment-light intensity for the PBR terrain path (Phase 6d), 0..1.
+   * Scales scene.environmentIntensity (× day/night sun curve). Ignored when
+   * USE_PBR_TERRAIN is off (the scene has no environment texture then).
+   */
+  pbrIntensity: number;
   /** UI scale multiplier (0.5..2.0). */
   uiScale: number;
 }
@@ -61,6 +67,7 @@ export const DEFAULT_PREFS: Prefs = {
   filmGrainEnabled: true,
   colorblindMode: "none",
   toneMappingMode: "goldenHour",
+  pbrIntensity: 0.5,
   uiScale: 1.0,
 };
 
@@ -101,6 +108,7 @@ export function clampPrefs(p: Prefs): Prefs {
     toneMappingMode: VALID_TONE_MAPPING_MODES.includes(p.toneMappingMode)
       ? p.toneMappingMode
       : DEFAULT_PREFS.toneMappingMode,
+    pbrIntensity: clampField(p.pbrIntensity, 0, 1, DEFAULT_PREFS.pbrIntensity),
     uiScale: clampField(p.uiScale, 0.5, 2.0, DEFAULT_PREFS.uiScale),
   };
 }
@@ -166,6 +174,7 @@ export function parsePrefs(bytes: Uint8Array): Prefs {
     filmGrainEnabled: boolOrDefault("filmGrainEnabled", DEFAULT_PREFS.filmGrainEnabled),
     colorblindMode,
     toneMappingMode,
+    pbrIntensity: numOrDefault("pbrIntensity", DEFAULT_PREFS.pbrIntensity),
     uiScale: numOrDefault("uiScale", DEFAULT_PREFS.uiScale),
   });
 }

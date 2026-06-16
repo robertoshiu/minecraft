@@ -78,6 +78,7 @@ import { GameEffects } from "./effects/game-effects";
 import { initPostFX, type PostFXController } from "./rendering/post-fx";
 import { HintManager } from "./ui/hints";
 import { Equipment, ARMOR_SLOTS } from "./inventory/equipment";
+import { tickEffects } from "./effects/status";
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
@@ -921,6 +922,11 @@ engine.runRenderLoop(() => {
     mobDriver.spawnTick(player.feet, clock, Math.random);
     hintManager?.onSpawn();
     mobDriver.aiTick(player, clock, currentTick);
+
+    // Status effects (potions): regen/poison/instant tick on their own timers,
+    // independent of tickSurvival (already called inside player.update). Runs
+    // before the death check so instant_damage etc. can be lethal this tick.
+    tickEffects(player.effects, player.survival, currentTick);
 
     // Death: the loop owns the death → screen → respawn cycle (the controller
     // no longer auto-respawns). On the rising edge, show the overlay; the

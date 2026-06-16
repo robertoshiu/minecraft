@@ -32,6 +32,7 @@ import {
 import { sweepMove, type Vec3 } from "./collision";
 import { Inventory, Hotbar } from "../inventory/inventory";
 import { Equipment } from "../inventory/equipment";
+import { makeEffectState, type EffectState } from "../effects/status";
 import type { World } from "../world/world";
 import {
   makeSurvivalState,
@@ -68,6 +69,8 @@ export class Player {
   readonly inventory: Inventory;
   readonly hotbar: Hotbar;
   readonly equipment: Equipment;
+  /** Active status effects (potions). SEPARATE from SurvivalState. */
+  readonly effects: EffectState;
   private readonly spawn: Vec3;
 
   constructor(spawn: Vec3) {
@@ -78,6 +81,7 @@ export class Player {
     this.inventory = new Inventory();
     this.hotbar = new Hotbar();
     this.equipment = new Equipment();
+    this.effects = makeEffectState();
   }
 
   /**

@@ -15,7 +15,7 @@ import { Mob, type Vec3 } from "./entity";
 import { mobStep, tryStepUp, type SolidQuery } from "./physics";
 import { MOB_STATS, type MobType } from "../rules/mob-stats";
 import { Items } from "../rules/items";
-import { TICKS_PER_SECOND } from "../rules/mc-1.20";
+import { TICKS_PER_SECOND, BABY_SCALE } from "../rules/mc-1.20";
 
 /** Source of randomness in [0, 1). Injected so tests can seed it. */
 export type Rng = () => number;
@@ -163,6 +163,9 @@ export function breed(
   const baby = new Mob(nextId(), a.type, midpoint);
   // A freshly bred baby also starts on cooldown so it cannot instantly re-breed.
   baby.breedCooldown = BREED_COOLDOWN_TICKS;
+  // Real baby: stamp the per-instance scale so BOTH the hitbox (aabb/physics)
+  // and the render root (mob-renderer reads the same key) shrink to BABY_SCALE.
+  baby.extra["babyScale"] = BABY_SCALE;
 
   a.inLove = false;
   b.inLove = false;

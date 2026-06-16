@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { World } from "../world/world";
 import { Player } from "../player/controller";
 import { makeClock, type Clock } from "../time/clock";
-import { TIME, Blocks, type BlockId } from "../rules/mc-1.20";
+import { TIME, Blocks, type BlockId, BABY_SCALE } from "../rules/mc-1.20";
 import type { RemeshNotifier } from "../rendering/world-renderer";
 import { Mob } from "../mobs/entity";
 import { MOB_STATS, type MobType } from "../rules/mob-stats";
@@ -373,5 +373,29 @@ describe("applyPlayerDamage resistance (Phase 5)", () => {
     applyPlayerDamage(player, 1, 100);
     expect(player.survival.health).toBe(20);
     expect(player.equipment.get("chestplate")!.durability).toBe(startDur);
+  });
+});
+
+describe("pickMob — baby hitbox (Phase 6c)", () => {
+  it("a ray grazing the adult top edge MISSES the baby (smaller box)", () => {
+    // Cow adult height = 1.4 → box [feet.y, feet.y+1.4].
+    // Baby scale = 0.5 → baby height = 0.7 → box [feet.y, feet.y+0.7].
+    // Feet at y=64. Origin y=65.0 is INSIDE the adult box (64 ≤ 65.0 < 65.4)
+    // but ABOVE the baby box (65.0 > 64.7). Ray shoots +z toward the mob.
+    // This geometry is the differential: adult hit / baby miss.
+    const cowFeet = { x: 0, y: 64, z: 5 };
+    const origin = { x: 0, y: 65.0, z: 0 };
+    const dir = { x: 0, y: 0, z: 1 };
+
+    // Confirm the ray hits an adult cow (adult box top = 64 + 1.4 = 65.4 > 65.0).
+    const adult = new Mob(1, "cow", cowFeet);
+    const hitAdult = pickMob(origin, dir, 50, [adult]);
+    expect(hitAdult).toBe(adult);
+
+    // Same ray must MISS a baby cow (baby box top = 64 + 0.7 = 64.7 < 65.0).
+    const baby = new Mob(2, "cow", cowFeet);
+    baby.extra["babyScale"] = BABY_SCALE;
+    const hitBaby = pickMob(origin, dir, 50, [baby]);
+    expect(hitBaby).toBeNull();
   });
 });

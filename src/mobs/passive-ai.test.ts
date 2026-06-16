@@ -3,6 +3,7 @@ import { Mob } from "./entity";
 import type { SolidQuery } from "./physics";
 import { tickPassive, feed, breed, BREED_COOLDOWN_TICKS } from "./passive-ai";
 import { Items } from "../rules/items";
+import { BABY_SCALE } from "../rules/mc-1.20";
 
 /** Floor: solid for every block with by < floorTop (surface at y = floorTop). */
 function flatFloor(floorTop: number): SolidQuery {
@@ -221,5 +222,24 @@ describe("breed", () => {
     const baby = breed(a, b, nextIdFactory(99), 1000);
     expect(baby?.id).toBe(99);
     expect(baby?.type).toBe("cow");
+  });
+});
+
+describe("breed — baby scale (Phase 6c)", () => {
+  it("stamps babyScale on the baby so its aabb is half-size", () => {
+    const a = new Mob(1, "cow", { x: 0, y: 64, z: 0 });
+    const b = new Mob(2, "cow", { x: 2, y: 64, z: 0 });
+    a.inLove = true;
+    b.inLove = true;
+    let next = 100;
+    const baby = breed(a, b, () => next++, 0);
+    expect(baby).not.toBeNull();
+    if (baby === null) return;
+    expect(baby.extra["babyScale"]).toBe(BABY_SCALE);
+
+    const adult = new Mob(9, "cow", baby.feet);
+    const adultH = adult.aabb().max.y - adult.aabb().min.y;
+    const babyH = baby.aabb().max.y - baby.aabb().min.y;
+    expect(babyH).toBeCloseTo(adultH * BABY_SCALE, 10);
   });
 });

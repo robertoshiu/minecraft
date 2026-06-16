@@ -346,6 +346,15 @@ export const MOB_CAP = {
   PASSIVE: 10,
 } as const;
 
+/**
+ * Uniform scale applied to a BABY mob's hitbox AND its render root (Phase 6c).
+ * 0.5 mirrors Minecraft's ~half-size babies. Read off mob.extra["babyScale"]
+ * (default 1.0 = adult) by both Mob.aabb()/physics (hitbox) and the renderer
+ * (visual). Stored in the open `extra` map so it persists with no MobSave
+ * schema change and no SAVE_VERSION bump.
+ */
+export const BABY_SCALE = 0.5;
+
 // ---------------------------------------------------------------------------
 // Status effects (Phase 5). Durations/intervals in TICKS (20 TPS).
 // ---------------------------------------------------------------------------

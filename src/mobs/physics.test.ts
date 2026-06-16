@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { Mob } from "./entity";
 import { mobStep, tryStepUp, type SolidQuery } from "./physics";
-import { PHYSICS } from "../rules/mc-1.20";
+import { PHYSICS, BABY_SCALE } from "../rules/mc-1.20";
+import { MOB_STATS } from "../rules/mob-stats";
 
 /** Floor: solid for every block with by < floorTop (i.e. surface at y = floorTop). */
 function flatFloor(floorTop: number): SolidQuery {
@@ -124,4 +125,81 @@ it("mobStep blends the knockback accumulator into horizontal velocity then decay
   mobStep(mob, ZERO, noSolid);
   expect(mob.feet.x).toBeGreaterThan(0);
   expect(mob.knockback.x).toBeCloseTo(0.2, 6);
+});
+
+describe("baby hitbox physics (Phase 6c)", () => {
+  it("a baby cow fits under a ceiling its adult self would hit", () => {
+    // Differential: cow height=1.4, baby height=0.7 (BABY_SCALE=0.5).
+    //
+    // Geometry (tryStepUp headroom check):
+    //   landingY = feetY + 1 = 65.
+    //   adult topCell = floor(65 + 1.4 - eps) = floor(66.4) = 66  → hits ceiling at by=66.
+    //   baby  topCell = floor(65 + 0.7 - eps) = floor(65.7) = 65  → cell 65 is air → clears.
+    //
+    // Clearance above landing is ~1.0 block for the baby (65→66) and only ~0.4 for
+    // the adult (65→66 with top at 66.4), so ceiling solid at by=66 blocks the adult
+    // but not the baby.
+    //
+    // Both mobs must have onGround=true so tryStepUp doesn't short-circuit before
+    // reading the scaled height.
+    const isSolid: SolidQuery = (bx, by, _bz) => {
+      if (by < 64) return true;         // floor surface at y=64
+      if (bx === 2 && by === 64) return true; // 1-block ledge ahead
+      if (by === 66) return true;        // low ceiling — in the band (baby height=0.7 < 1.0, adult height=1.4 > 1.0)
+      return false;
+    };
+
+    const baby = new Mob(1, "cow", { x: 1.5, y: 64, z: 0.5 });
+    baby.extra["babyScale"] = BABY_SCALE;
+    baby.onGround = true;
+
+    const adult = new Mob(2, "cow", { x: 1.5, y: 64, z: 0.5 });
+    adult.onGround = true;
+
+    // Baby clears the ceiling; adult is blocked by it.
+    expect(tryStepUp(baby, isSolid, { x: 1, y: 0, z: 0 })).toBe(true);
+    expect(tryStepUp(adult, isSolid, { x: 1, y: 0, z: 0 })).toBe(false);
+  });
+
+  it("a baby's collision box is narrower than an adult's (stops further from a wall)", () => {
+    // Differential: cow width=0.9, hw=0.45; baby hw=0.225 (BABY_SCALE=0.5).
+    //
+    // Both mobs are driven into a solid wall at bx=2 (face at x=2.0) along +x.
+    // resolveAxis clamps each mob when its leading face (feet.x + hw) reaches the
+    // wall face (x=2.0 - eps).  After convergence:
+    //   adult stops at feet.x ≈ 2.0 - 0.45 = 1.55
+    //   baby  stops at feet.x ≈ 2.0 - 0.225 = 1.775
+    //
+    // So baby.feet.x > adult.feet.x — the baby advances closer to the wall because
+    // its half-width is half the adult's.  If the scale wiring were reverted so the
+    // baby accidentally used adult width, both would stop at ~1.55 and the assertion
+    // would fail.
+    const isSolid: SolidQuery = (bx, by, _bz) => {
+      if (by < 64) return true;  // floor
+      if (bx === 2) return true; // wall ahead at x=2..3
+      return false;
+    };
+
+    const baby = new Mob(1, "cow", { x: 0.5, y: 64, z: 0.5 });
+    baby.extra["babyScale"] = BABY_SCALE;
+    baby.onGround = true;
+
+    const adult = new Mob(2, "cow", { x: 0.5, y: 64, z: 0.5 });
+    adult.onGround = true;
+
+    const push = { x: 0.3, y: 0, z: 0 };
+    for (let i = 0; i < 30; i++) {
+      mobStep(baby, push, isSolid);
+      mobStep(adult, push, isSolid);
+    }
+
+    // Baby is closer to the wall because its narrower box fits further in.
+    expect(baby.feet.x).toBeGreaterThan(adult.feet.x);
+    // Adult leading face is flush against the wall face (x=2.0).
+    const adultHw = MOB_STATS["cow"].width / 2; // 0.45
+    expect(adult.feet.x + adultHw).toBeCloseTo(2.0, 4);
+    // Baby leading face is also flush against the same wall face.
+    const babyHw = adultHw * BABY_SCALE; // 0.225
+    expect(baby.feet.x + babyHw).toBeCloseTo(2.0, 4);
+  });
 });

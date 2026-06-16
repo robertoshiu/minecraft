@@ -99,15 +99,40 @@ export class Mob {
     this.extra = {};
   }
 
-  /** This mob's world-space AABB derived from `feet` + its type's size. */
-  aabb(): MobAabb {
+  /**
+   * Uniform hitbox scale for this mob (1.0 = adult). Babies stamp
+   * `extra["babyScale"]` (= BABY_SCALE) at breed time; everything else reads
+   * 1.0. This is the SINGLE place the hitbox size multiplier is resolved, so
+   * aabb() and the size-aware physics agree.
+   */
+  sizeScale(): number {
+    return this.extra["babyScale"] ?? 1.0;
+  }
+
+  /**
+   * The mob's effective hitbox half-width and height, scaled by
+   * {@link sizeScale}. This is the SINGLE place the scaled-dims arithmetic
+   * lives; both {@link aabb} and the physics' `scaledSize` delegate here so
+   * the two consumers can never silently drift.
+   */
+  scaledDims(): { hw: number; height: number } {
+    const s = this.sizeScale();
     const stats = MOB_STATS[this.type];
-    const hw = stats.width / 2;
+    return { hw: (stats.width * s) / 2, height: stats.height * s };
+  }
+
+  /**
+   * This mob's world-space AABB derived from `feet` + its type's size, scaled
+   * by {@link sizeScale} (babies are smaller). `feet` stays the bottom anchor:
+   * the (possibly smaller) box bottoms at feet.y and is centered on x/z.
+   */
+  aabb(): MobAabb {
+    const { hw, height } = this.scaledDims();
     return {
       min: { x: this.feet.x - hw, y: this.feet.y, z: this.feet.z - hw },
       max: {
         x: this.feet.x + hw,
-        y: this.feet.y + stats.height,
+        y: this.feet.y + height,
         z: this.feet.z + hw,
       },
     };

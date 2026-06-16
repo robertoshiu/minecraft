@@ -596,8 +596,8 @@ export class MobRenderer {
       record.root.position.set(mob.feet.x, mob.feet.y, mob.feet.z);
       record.root.rotation.y = mob.yaw;
 
-      // Visual-only baby scale: shrinks the render root ONLY. aabb() reads
-      // MOB_STATS directly (entity.ts) so the hitbox stays adult-sized.
+      // Baby scale: shrinks the render root AND the hitbox (via mob.scaledDims(),
+      // shared by aabb() and physics), using the same extra["babyScale"] key.
       const babyScale = mob.extra["babyScale"] ?? 1.0;
       record.root.scaling.setAll(babyScale);
 

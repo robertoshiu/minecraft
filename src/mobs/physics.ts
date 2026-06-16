@@ -12,7 +12,6 @@
  */
 
 import { PHYSICS } from "../rules/mc-1.20";
-import { MOB_STATS } from "../rules/mob-stats";
 import type { Mob, Vec3 } from "./entity";
 
 /** Is the voxel at integer block coords solid (collidable)? */
@@ -36,6 +35,15 @@ interface Box {
   maxX: number;
   maxY: number;
   maxZ: number;
+}
+
+/**
+ * The mob's effective hitbox half-width + height. Delegates to
+ * {@link Mob.scaledDims} so the scaled-dims arithmetic lives in exactly one
+ * place (entity.ts); collision and targeting are guaranteed to agree.
+ */
+function scaledSize(mob: Mob): { hw: number; height: number } {
+  return mob.scaledDims();
 }
 
 /** Build a mob's AABB from a feet position and its half-width/height. */
@@ -172,9 +180,7 @@ export function mobStep(
   desiredHoriz: Vec3,
   isSolid: SolidQuery,
 ): void {
-  const stats = MOB_STATS[mob.type];
-  const hw = stats.width / 2;
-  const height = stats.height;
+  const { hw, height } = scaledSize(mob);
 
   // 1) Gravity (match player vertical integration: drag then accel).
   let vy = mob.velocity.y;
@@ -261,9 +267,7 @@ export function tryStepUp(
   const len = Math.hypot(horizDir.x, horizDir.z);
   if (len === 0) return false;
 
-  const stats = MOB_STATS[mob.type];
-  const hw = stats.width / 2;
-  const height = stats.height;
+  const { hw, height } = scaledSize(mob);
 
   // One block ahead in the horizontal direction of travel, just past the
   // mob's leading face.

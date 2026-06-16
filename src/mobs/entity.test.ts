@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Mob, NEVER_DAMAGED_TICK, type AiState } from "./entity";
+import { BABY_SCALE } from "../rules/mc-1.20";
 import {
   MOB_STATS,
   PASSIVE_TYPES,
@@ -113,5 +114,64 @@ describe("Mob.takeDamage / isDead", () => {
     mob.takeDamage(MOB_STATS["sheep"].maxHealth, 5);
     expect(mob.health).toBe(0);
     expect(mob.isDead()).toBe(true);
+  });
+});
+
+describe("Mob.aabb — baby scale (Phase 6c)", () => {
+  it("a baby's aabb is babyScale× the adult dims, still bottomed at feet", () => {
+    const adult = new Mob(1, "cow", { x: 10, y: 64, z: -4 });
+    const baby = new Mob(2, "cow", { x: 10, y: 64, z: -4 });
+    baby.extra["babyScale"] = BABY_SCALE;
+
+    const a = adult.aabb();
+    const b = baby.aabb();
+    const adultW = a.max.x - a.min.x;
+    const adultH = a.max.y - a.min.y;
+    expect(b.max.x - b.min.x).toBeCloseTo(adultW * BABY_SCALE, 10);
+    expect(b.max.z - b.min.z).toBeCloseTo(adultW * BABY_SCALE, 10);
+    expect(b.max.y - b.min.y).toBeCloseTo(adultH * BABY_SCALE, 10);
+
+    // Still bottomed at feet and centered on x/z.
+    expect(b.min.y).toBe(64);
+    expect((b.min.x + b.max.x) / 2).toBeCloseTo(10, 10);
+    expect((b.min.z + b.max.z) / 2).toBeCloseTo(-4, 10);
+  });
+
+  it("sizeScale defaults to 1.0 for a fresh (adult) mob", () => {
+    expect(new Mob(1, "pig", { x: 0, y: 0, z: 0 }).sizeScale()).toBe(1.0);
+  });
+});
+
+describe("Mob.scaledDims — cross-check with aabb (Fix 3 DRY guard)", () => {
+  it("scaledDims() and aabb() agree for an adult mob (all species)", () => {
+    // Guards that the single-source scaledDims() and its consumer aabb() can
+    // never silently drift: aabb()-derived extents must equal scaledDims() exactly.
+    for (const type of ALL_TYPES) {
+      const mob = new Mob(1, type, { x: 5, y: 64, z: 3 });
+      const { hw, height } = mob.scaledDims();
+      const box = mob.aabb();
+      expect(box.max.y - mob.feet.y).toBeCloseTo(height, 10);
+      expect(box.max.x - mob.feet.x).toBeCloseTo(hw, 10);
+    }
+  });
+
+  it("scaledDims() and aabb() agree for a baby mob", () => {
+    const mob = new Mob(1, "cow", { x: 5, y: 64, z: 3 });
+    mob.extra["babyScale"] = BABY_SCALE;
+    const { hw, height } = mob.scaledDims();
+    const box = mob.aabb();
+    expect(box.max.y - mob.feet.y).toBeCloseTo(height, 10);
+    expect(box.max.x - mob.feet.x).toBeCloseTo(hw, 10);
+  });
+
+  it("adult scaledDims() equals raw MOB_STATS (no scaling applied)", () => {
+    // Pins the adult-path: scaledDims for an adult = {hw: width/2, height} exactly.
+    for (const type of ALL_TYPES) {
+      const mob = new Mob(1, type, { x: 0, y: 0, z: 0 });
+      const stats = MOB_STATS[type];
+      const { hw, height } = mob.scaledDims();
+      expect(hw).toBeCloseTo(stats.width / 2, 10);
+      expect(height).toBeCloseTo(stats.height, 10);
+    }
   });
 });

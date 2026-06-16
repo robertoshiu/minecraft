@@ -314,6 +314,34 @@ export const MOB_CAP = {
   PASSIVE: 10,
 } as const;
 
+// ---------------------------------------------------------------------------
+// Status effects (Phase 5). Durations/intervals in TICKS (20 TPS).
+// ---------------------------------------------------------------------------
+
+/** Per-effect tuning. Durations are total ticks; intervals gate periodic ticks. */
+export const EFFECT_TUNING = {
+  /** Default potion duration for non-instant effects (ticks). 45 s. */
+  DEFAULT_DURATION: 900,
+  /** Regeneration heals 1 HP every this many ticks (Regen I). Higher amplifier is faster. */
+  REGEN_INTERVAL: 50,
+  /** Regen interval shrinks by this many ticks per amplifier level above 0 (min 10). */
+  REGEN_INTERVAL_PER_AMP: 25,
+  /** Poison deals 1 HP every this many ticks (Poison I). */
+  POISON_INTERVAL: 25,
+  /** Poison interval shrinks by this many ticks per amplifier level above 0 (min 5). */
+  POISON_INTERVAL_PER_AMP: 12,
+  /** Instant Health restores this many HP per (amplifier+1). */
+  INSTANT_HEALTH_PER_LEVEL: 6,
+  /** Instant Damage deals this many HP per (amplifier+1). */
+  INSTANT_DAMAGE_PER_LEVEL: 6,
+  /** Resistance reduces post-armor damage by this fraction per (amplifier+1). 4 levels → 80%. */
+  RESISTANCE_PER_LEVEL: 0.2,
+  /** Strength adds this many half-hearts to melee per (amplifier+1). */
+  STRENGTH_PER_LEVEL: 3,
+  /** Swiftness multiplies move speed by (1 + this × (amplifier+1)). */
+  SWIFTNESS_PER_LEVEL: 0.2,
+} as const;
+
 export const LIGHT = {
   /** Max light level at which hostile mobs may spawn. */
   HOSTILE_MAX: 7,

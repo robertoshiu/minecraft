@@ -142,6 +142,13 @@ describe("Mob.aabb — baby scale (Phase 6c)", () => {
   });
 });
 
+describe("Mob.effects (Phase 6c)", () => {
+  it("a fresh mob starts with an empty effect list", () => {
+    const mob = new Mob(1, "zombie", { x: 0, y: 0, z: 0 });
+    expect(mob.effects.list).toEqual([]);
+  });
+});
+
 describe("Mob.scaledDims — cross-check with aabb (Fix 3 DRY guard)", () => {
   it("scaledDims() and aabb() agree for an adult mob (all species)", () => {
     // Guards that the single-source scaledDims() and its consumer aabb() can

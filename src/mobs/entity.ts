@@ -10,6 +10,7 @@
  */
 
 import { type MobType, MOB_STATS, PASSIVE_TYPES, HOSTILE_TYPES } from "../rules/mob-stats";
+import { type EffectState, makeEffectState } from "../effects/status";
 
 /** A 3D vector. */
 export interface Vec3 {
@@ -78,6 +79,11 @@ export class Mob {
   fuseTimer: number;
   /** Scratch numeric state for AI extensions (no fixed schema). */
   extra: Record<string, number>;
+  /**
+   * Active status effects on this mob (Phase 6c). Same machinery as the player
+   * (applyEffect/tickEffects). Ticked by tickMobEffects in the mob driver.
+   */
+  effects: EffectState;
 
   constructor(id: number, type: MobType, spawn: Vec3) {
     this.id = id;
@@ -97,6 +103,7 @@ export class Mob {
     this.inLove = false;
     this.fuseTimer = -1;
     this.extra = {};
+    this.effects = makeEffectState();
   }
 
   /**

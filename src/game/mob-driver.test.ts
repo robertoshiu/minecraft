@@ -322,4 +322,14 @@ describe("applyPlayerDamage", () => {
     expect(player.survival.health).toBe(20);
     expect(player.equipment.get("chestplate")!.durability).toBe(durBefore);
   });
+  it("ignores a second hit inside the invulnerability window", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.survival.health = 20;
+    applyPlayerDamage(player, 6, 100);
+    expect(player.survival.health).toBe(14);
+    applyPlayerDamage(player, 6, 101); // within INVULNERABLE_TICKS → ignored
+    expect(player.survival.health).toBe(14);
+    applyPlayerDamage(player, 6, 200); // window expired → applies
+    expect(player.survival.health).toBe(8);
+  });
 });

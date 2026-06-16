@@ -24,6 +24,7 @@ import { isNight } from "../time/clock";
 import { makeStack, damageTool } from "../inventory/stack";
 import type { ItemDef, ToolTier } from "../rules/items";
 import { armorReduction } from "../combat/armor";
+import { isInvulnerable } from "../combat/iframes";
 import { ARMOR_SLOTS } from "../inventory/equipment";
 
 import { MobManager } from "../mobs/manager";
@@ -517,11 +518,13 @@ function raySlab(
 export function applyPlayerDamage(
   player: Player,
   rawAmount: number,
-  _currentTick: number,
+  currentTick: number,
 ): void {
   const defense = player.equipment.totalDefense();
   const effective = armorReduction(rawAmount, defense);
   if (effective <= 0) return; // fully absorbed — no health loss, no durability wear
+  // i-frames: ignore hits within the immunity window of the last real hit.
+  if (isInvulnerable(player.survival.lastDamageTick, currentTick)) return;
   // Decrement durability on each worn piece that took the hit.
   for (const slot of ARMOR_SLOTS) {
     const piece = player.equipment.get(slot);
@@ -530,6 +533,7 @@ export function applyPlayerDamage(
     }
   }
   damage(player.survival, effective);
+  player.survival.lastDamageTick = currentTick;
 }
 
 /**

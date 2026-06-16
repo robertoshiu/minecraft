@@ -30,6 +30,7 @@ import { HUNGER, EXHAUSTION, HEALTH } from "../rules/mc-1.20";
  *                 each full 4.0 is consumed to drain saturation/food.
  * - `regenTimer`  ticks accumulated toward the next natural-regen heart.
  * - `starveTimer` ticks accumulated toward the next starvation-damage tick.
+ * - `lastDamageTick` absolute tick of the last hit through the damage chokepoint (i-frames). -1 = never.
  */
 export interface SurvivalState {
   health: number;
@@ -38,6 +39,8 @@ export interface SurvivalState {
   exhaustion: number;
   regenTimer: number;
   starveTimer: number;
+  /** Absolute tick of the last hit through the damage chokepoint (i-frames). -1 = never. */
+  lastDamageTick: number;
 }
 
 /**
@@ -52,6 +55,7 @@ export function makeSurvivalState(): SurvivalState {
     exhaustion: 0,
     regenTimer: 0,
     starveTimer: 0,
+    lastDamageTick: -1,
   };
 }
 

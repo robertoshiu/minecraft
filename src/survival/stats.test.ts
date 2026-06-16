@@ -21,6 +21,7 @@ describe("makeSurvivalState", () => {
       exhaustion: 0,
       regenTimer: 0,
       starveTimer: 0,
+      lastDamageTick: -1,
     });
   });
 
@@ -283,5 +284,11 @@ describe("damage and heal", () => {
     const s = makeSurvivalState();
     s.health = 1;
     expect(isDead(s)).toBe(false);
+  });
+});
+
+describe("makeSurvivalState — lastDamageTick", () => {
+  it("makeSurvivalState seeds lastDamageTick to -1 (never damaged)", () => {
+    expect(makeSurvivalState().lastDamageTick).toBe(-1);
   });
 });

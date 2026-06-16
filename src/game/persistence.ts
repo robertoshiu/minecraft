@@ -26,6 +26,7 @@ import { migrate, SAVE_VERSION } from "../save/migration";
 import { atomicWrite, safeRead, type SaveStore } from "../save/store";
 import { serializeMobs } from "../mobs/persistence";
 import type { MobManager } from "../mobs/manager";
+import { BrewingStands } from "../crafting/brewing-stands";
 import { type Equipment, ARMOR_SLOTS } from "../inventory/equipment";
 import { EFFECT_TYPE_IDS } from "../effects/status";
 
@@ -96,6 +97,7 @@ export function buildWorldSave(
   clock: Clock,
   view: ViewAngles,
   mobs?: MobManager,
+  brewingStands?: BrewingStands,
 ): WorldSave {
   const s = player.survival;
   const sp = player.spawnPoint;
@@ -130,6 +132,7 @@ export function buildWorldSave(
     player: playerSave,
     columns,
     mobs: mobs === undefined ? [] : serializeMobs(mobs.all()),
+    brewingStands: brewingStands === undefined ? [] : brewingStands.toSave(),
   };
 }
 
@@ -145,9 +148,10 @@ export async function saveGame(
   clock: Clock,
   view: ViewAngles,
   mobs?: MobManager,
+  brewingStands?: BrewingStands,
 ): Promise<boolean> {
   try {
-    const save = buildWorldSave(world, player, clock, view, mobs);
+    const save = buildWorldSave(world, player, clock, view, mobs, brewingStands);
     const bytes = serializeSave(save);
     await atomicWrite(store, SAVE_KEY, bytes);
     return true;

@@ -66,6 +66,8 @@ import { InventoryScreen } from "./ui/inventory-screen";
 import { PauseMenu } from "./ui/pause-menu";
 import { SettingsScreen } from "./ui/settings-screen";
 import { WorkbenchScreen } from "./ui/workbench-screen";
+import { BrewingStandScreen } from "./ui/brewing-stand-screen";
+import { BrewingStands } from "./crafting/brewing-stands";
 import { HelpOverlay } from "./ui/help-overlay";
 import { showDeath, hideDeath, DeathScreenState } from "./ui/death-screen";
 import {
@@ -431,6 +433,9 @@ function restoreFromSave(save: Awaited<ReturnType<typeof loadGame>>): void {
   // Live mobs (save v2+; absent on older saves → empty list).
   mobDriver.manager.load(deserializeMobs(save.mobs ?? []));
 
+  // Placed brewing stands (save v7+; absent on older saves → empty registry).
+  brewingStands = BrewingStands.fromSave(save.brewingStands ?? []);
+
   // Rebuild all meshes against the restored world (disposes old sections).
   renderer.buildInitial(WORLD_RADIUS_COLUMNS);
 }
@@ -470,6 +475,9 @@ applyPrefs(currentPrefs);
 const inventoryScreen = new InventoryScreen();
 const settingsScreen = new SettingsScreen();
 const workbenchScreen = new WorkbenchScreen();
+const brewingStandScreen = new BrewingStandScreen();
+/** Live registry of placed brewing stands (per-coords; persisted at v7). */
+let brewingStands = new BrewingStands();
 const helpOverlay = new HelpOverlay();
 
 const pauseMenu = new PauseMenu({
@@ -508,6 +516,7 @@ function uiBlockingGameplay(): boolean {
     deathState.isShown() ||
     settingsScreen.isOpen() ||
     workbenchScreen.isOpen() ||
+    brewingStandScreen.isOpen() ||
     helpOverlay.isOpen()
   );
 }
@@ -583,6 +592,8 @@ window.addEventListener("keydown", (e) => {
       if (store !== null) { void savePrefs(store, currentPrefs); }
     } else if (workbenchScreen.isOpen()) {
       workbenchScreen.close();
+    } else if (brewingStandScreen.isOpen()) {
+      brewingStandScreen.close();
     } else if (inventoryScreen.isOpen()) {
       inventoryScreen.close();
     } else {
@@ -774,6 +785,20 @@ function handleClick(button: number): void {
     const targetBlock = world.getBlock(hit.block.x, hit.block.y, hit.block.z);
     if (targetBlock === Blocks.CRAFTING_TABLE) {
       workbenchScreen.open(player.inventory, player.hotbar);
+      releasePointer();
+      return;
+    }
+    // RMB on a brewing stand → open the brewing UI for THAT placed stand (do
+    // NOT place a block). The target block coords come from the same raycast
+    // hit used elsewhere in handleClick — bind the registry's stand at those
+    // integer coords (getOrCreate registers a fresh one on first open).
+    if (targetBlock === Blocks.BREWING_STAND) {
+      const stand = brewingStands.getOrCreate(
+        hit.block.x,
+        hit.block.y,
+        hit.block.z,
+      );
+      brewingStandScreen.open(stand, player.inventory, player.hotbar);
       releasePointer();
       return;
     }
@@ -1020,6 +1045,7 @@ engine.runRenderLoop(() => {
         clock.totalTicks,
       );
     advance(clock, 1);
+    brewingStands.tickAll();
     // Mobs advance on the same fixed tick. currentTick is the clock's monotonic
     // counter (post-advance), shared by spawn gating, AI, and combat timing.
     const currentTick = clock.totalTicks;
@@ -1129,6 +1155,9 @@ engine.runRenderLoop(() => {
   if (workbenchScreen.isOpen()) {
     workbenchScreen.render(player.inventory, player.hotbar);
   }
+  if (brewingStandScreen.isOpen()) {
+    brewingStandScreen.render();
+  }
 
   // Drive the sky / sun / fog from the clock's time-of-day.
   applySky({ scene, sun: sunLight, hemi: hemiLight }, clock);
@@ -1199,6 +1228,7 @@ async function requestSave(): Promise<void> {
     clock,
     currentView(),
     mobDriver.manager,
+    brewingStands,
   );
   if (ok) flashSaved();
 }

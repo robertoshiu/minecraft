@@ -116,3 +116,12 @@ describe("tryStepUp — D5", () => {
     expect(tryStepUp(mob, isSolid, { x: 0, y: 0, z: 0 })).toBe(false);
   });
 });
+
+it("mobStep blends the knockback accumulator into horizontal velocity then decays it", () => {
+  const mob = new Mob(1, "zombie", { x: 0, y: 8, z: 0 });
+  mob.knockback = { x: 0.4, y: 0, z: 0 };
+  const noSolid = () => false; // open air
+  mobStep(mob, ZERO, noSolid);
+  expect(mob.feet.x).toBeGreaterThan(0);
+  expect(mob.knockback.x).toBeCloseTo(0.2, 6);
+});

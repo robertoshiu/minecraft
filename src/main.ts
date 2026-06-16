@@ -682,7 +682,10 @@ function handleClick(button: number): void {
         const slot = player.hotbar.selected;
         const held = player.inventory.get(slot);
         const heldDef = held === null ? null : getItemDef(held.itemId);
-        attackMob(mob, clock.totalTicks, attackDamageFor(heldDef));
+        attackMob(mob, clock.totalTicks, attackDamageFor(heldDef), {
+          x: eye.x,
+          z: eye.z,
+        });
         // Play hurt sound at mob position.
         gameAudio?.onMobHurt(mob.feet);
         if (held !== null && isTool(held)) {

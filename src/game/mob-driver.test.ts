@@ -333,3 +333,20 @@ describe("applyPlayerDamage", () => {
     expect(player.survival.health).toBe(8);
   });
 });
+
+describe("attackMob knockback", () => {
+  it("4-arg form applies an away-from-attacker impulse without changing damage", () => {
+    const mob = new Mob(9, "zombie", { x: 5, y: 0, z: 0 });
+    const full = MOB_STATS.zombie.maxHealth;
+    attackMob(mob, 1, PLAYER_ATTACK_DAMAGE, { x: 0, z: 0 });
+    expect(mob.health).toBe(full - PLAYER_ATTACK_DAMAGE);
+    expect(mob.knockback.x).toBeGreaterThan(0);
+    expect(mob.velocity.y).toBeGreaterThan(0);
+  });
+  it("2-arg form applies NO knockback (pinned behavior preserved)", () => {
+    const mob = new Mob(10, "zombie", { x: 5, y: 0, z: 0 });
+    attackMob(mob, 1);
+    expect(mob.knockback.x).toBe(0);
+    expect(mob.knockback.z).toBe(0);
+  });
+});

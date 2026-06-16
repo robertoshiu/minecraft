@@ -25,6 +25,7 @@ import { makeStack, damageTool } from "../inventory/stack";
 import type { ItemDef, ToolTier } from "../rules/items";
 import { armorReduction } from "../combat/armor";
 import { isInvulnerable } from "../combat/iframes";
+import { knockbackImpulse } from "../combat/knockback";
 import { ARMOR_SLOTS } from "../inventory/equipment";
 
 import { MobManager } from "../mobs/manager";
@@ -539,11 +540,20 @@ export function applyPlayerDamage(
 /**
  * Deal one player melee hit to `mob` at `currentTick`. Defaults to
  * {@link PLAYER_ATTACK_DAMAGE} (fists); pass `amount` to apply sword damage.
+ * The optional 4th arg `attackerXZ` applies a knockback impulse pushing the
+ * mob away from the attacker; omitting it preserves the pre-knockback behavior.
  */
 export function attackMob(
   mob: Mob,
   currentTick: number,
   amount: number = PLAYER_ATTACK_DAMAGE,
+  attackerXZ?: { x: number; z: number },
 ): void {
   mob.takeDamage(amount, currentTick);
+  if (attackerXZ !== undefined) {
+    const k = knockbackImpulse(attackerXZ, mob.feet);
+    mob.knockback.x += k.x;
+    mob.knockback.z += k.z;
+    mob.velocity.y = k.y; // upward component rides the existing gravity carry
+  }
 }

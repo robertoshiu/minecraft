@@ -46,6 +46,13 @@ export class Mob {
   feet: Vec3;
   /** Velocity in blocks/tick. */
   velocity: Vec3;
+  /**
+   * Pending knockback impulse (blocks/tick) on the XZ plane. Survives the
+   * unconditional horizontal overwrite in mobStep because it lives OUTSIDE
+   * velocity.x/z; mobStep blends + decays it. (The upward component is written
+   * straight into velocity.y, which mobStep carries forward via gravity.)
+   */
+  knockback: Vec3;
   /** Current health in half-hearts. */
   health: number;
   /** True iff resting on solid ground. */
@@ -77,6 +84,7 @@ export class Mob {
     this.type = type;
     this.feet = { x: spawn.x, y: spawn.y, z: spawn.z };
     this.velocity = { x: 0, y: 0, z: 0 };
+    this.knockback = { x: 0, y: 0, z: 0 };
     this.health = MOB_STATS[type].maxHealth;
     this.onGround = false;
     this.aiState = "idle";

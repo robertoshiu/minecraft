@@ -21,6 +21,11 @@ export type SolidQuery = (bx: number, by: number, bz: number) => boolean;
 /** Max distance a single sub-step may move on any axis (prevents tunneling). */
 const MAX_SUBSTEP = 0.2;
 
+/** Per-tick decay of the horizontal knockback accumulator. */
+const KNOCKBACK_DECAY = 0.5;
+/** Below this magnitude the accumulator snaps to 0. */
+const KNOCKBACK_EPSILON = 0.01;
+
 /** Tiny epsilon to keep the AABB from sitting exactly flush against a face. */
 const EPSILON = 1e-7;
 
@@ -178,8 +183,12 @@ export function mobStep(
   mob.velocity.y = vy;
 
   // 2) Horizontal velocity from the AI's desired motion.
-  mob.velocity.x = desiredHoriz.x;
-  mob.velocity.z = desiredHoriz.z;
+  mob.velocity.x = desiredHoriz.x + mob.knockback.x;
+  mob.velocity.z = desiredHoriz.z + mob.knockback.z;
+  mob.knockback.x *= KNOCKBACK_DECAY;
+  mob.knockback.z *= KNOCKBACK_DECAY;
+  if (Math.abs(mob.knockback.x) < KNOCKBACK_EPSILON) mob.knockback.x = 0;
+  if (Math.abs(mob.knockback.z) < KNOCKBACK_EPSILON) mob.knockback.z = 0;
 
   const vel = mob.velocity;
 

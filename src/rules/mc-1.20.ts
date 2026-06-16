@@ -342,6 +342,33 @@ export const EFFECT_TUNING = {
   SWIFTNESS_PER_LEVEL: 0.2,
 } as const;
 
+/** Max simultaneous in-flight arrows (pooled/capped). */
+export const ARROW_CAP = 16 as const;
+
+/** Bow/arrow ballistics (blocks/tick at 20 TPS). */
+export const ARROW = {
+  /** Launch speed at full charge (blocks/tick). ~3 b/tick ≈ 60 b/s. */
+  MAX_SPEED: 3.0,
+  /** Launch speed at zero charge (a limp release still leaves the bow). */
+  MIN_SPEED: 0.6,
+  /** Milliseconds of hold to reach full charge. */
+  FULL_CHARGE_MS: 1000,
+  /** Per-tick gravity applied to vy (matches mob integration: vy*DRAG - GRAVITY). */
+  GRAVITY: 0.05,
+  /** Per-tick air drag multiplier on velocity (slight). */
+  DRAG: 0.99,
+  /** Arrow half-extent for the swept AABB / render box (blocks). */
+  WIDTH: 0.1,
+  /** Arrow length along travel (render only). */
+  LENGTH: 0.5,
+  /** Damage a fully-charged arrow deals to a mob (half-hearts). */
+  DAMAGE: 6,
+  /** Ticks an arrow may fly before auto-despawn (safety cap). 30 s. */
+  MAX_AGE: 600,
+  /** Distance past the shooter eye to spawn the arrow (clear the body). */
+  SPAWN_OFFSET: 0.5,
+} as const;
+
 export const LIGHT = {
   /** Max light level at which hostile mobs may spawn. */
   HOSTILE_MAX: 7,

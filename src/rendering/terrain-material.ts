@@ -30,6 +30,7 @@ import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { Material } from "@babylonjs/core/Materials/material";
 import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { MaterialPluginBase } from "@babylonjs/core/Materials/materialPluginBase";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
@@ -245,6 +246,130 @@ varying float vFaceShade;
   }
 }
 
+/**
+ * A {@link MaterialPluginBase} that plugs the SAME procedural atlas lookup as
+ * {@link AtlasMaterialPlugin} into a {@link PBRMaterial}'s GLSL — but at the PBR
+ * albedo injection point `CUSTOM_FRAGMENT_UPDATE_ALBEDO` (writing `surfaceAlbedo`)
+ * instead of StandardMaterial's `CUSTOM_FRAGMENT_UPDATE_DIFFUSE` (`baseColor`).
+ * Babylon's full PBR lighting + IBL pipeline then runs on top, so metallic 0 +
+ * uniform roughness yield a matte voxel surface with image-based fill.
+ *
+ * Reuses the identical per-vertex attributes (tileIndex, faceShade) and the same
+ * atlas RawTexture, so chunk-mesh.ts is unchanged across flag states.
+ */
+class PbrAtlasMaterialPlugin extends MaterialPluginBase {
+  private _atlasTex: RawTexture;
+
+  constructor(material: Material, atlasTex: RawTexture) {
+    super(material, "PbrAtlasPlugin", 200, {}, true, true);
+    this._atlasTex = atlasTex;
+  }
+
+  override getClassName(): string {
+    return "PbrAtlasMaterialPlugin";
+  }
+
+  override getAttributes(attributes: string[], _scene: Scene, _mesh: AbstractMesh): void {
+    attributes.push("tileIndex");
+    attributes.push("faceShade");
+  }
+
+  override getSamplers(samplers: string[]): void {
+    samplers.push("atlasSampler");
+  }
+
+  override bindForSubMesh(
+    _uniformBuffer: UniformBuffer,
+    _scene: Scene,
+    _engine: AbstractEngine,
+    subMesh: SubMesh,
+  ): void {
+    const effect = subMesh.effect;
+    if (effect === null) return;
+    effect.setTexture("atlasSampler", this._atlasTex);
+  }
+
+  override isReadyForSubMesh(
+    _defines: MaterialDefines,
+    _scene: Scene,
+    _engine: AbstractEngine,
+    _subMesh: SubMesh,
+  ): boolean {
+    return true;
+  }
+
+  override getActiveTextures(activeTextures: BaseTexture[]): void {
+    activeTextures.push(this._atlasTex);
+  }
+
+  override hasTexture(texture: BaseTexture): boolean {
+    return texture === this._atlasTex;
+  }
+
+  override prepareDefinesBeforeAttributes(
+    defines: MaterialDefines,
+    _scene: Scene,
+    _mesh: AbstractMesh,
+  ): void {
+    defines._needUVs = true;
+  }
+
+  override getCustomCode(
+    shaderType: string,
+  ): { [pointName: string]: string } | null {
+    if (shaderType === "vertex") {
+      return {
+        CUSTOM_VERTEX_DEFINITIONS: `
+attribute float tileIndex;
+varying float vTileIndex;
+varying vec2 vAtlasUV;
+attribute float faceShade;
+varying float vFaceShade;
+`,
+        CUSTOM_VERTEX_MAIN_END: `
+vTileIndex = tileIndex;
+vAtlasUV = uvUpdated;
+vFaceShade = faceShade;
+`,
+      };
+    }
+
+    if (shaderType === "fragment") {
+      return {
+        CUSTOM_FRAGMENT_DEFINITIONS: `
+varying float vTileIndex;
+varying vec2 vAtlasUV;
+uniform sampler2D atlasSampler;
+varying float vFaceShade;
+`,
+        // PBR albedo injection: surfaceAlbedo is the vec3 the PBR pipeline uses
+        // as the diffuse base before lighting/IBL. Same atlas/faceShade/contact-AO
+        // math as the StandardMaterial path, written into surfaceAlbedo.
+        CUSTOM_FRAGMENT_UPDATE_ALBEDO: `
+{
+  float _tileIdx = floor(vTileIndex + 0.5);
+  float _col = mod(_tileIdx, 16.0);
+  float _row = floor(_tileIdx / 16.0);
+  vec2 _tileUV = clamp(fract(vAtlasUV), 0.02, 0.98);
+  vec2 _atlasUV = (vec2(_col, _row) + _tileUV) / 16.0;
+  vec4 _atlasSample = texture2D(atlasSampler, _atlasUV);
+  surfaceAlbedo = _atlasSample.rgb;
+  surfaceAlbedo *= vFaceShade;
+  vec2 _g = fract(vAtlasUV);
+  float _edge = min(min(_g.x, 1.0 - _g.x), min(_g.y, 1.0 - _g.y));
+  float _contactAO = smoothstep(0.0, 0.08, _edge);
+  float _aoFactor = mix(0.90, 1.0, _contactAO);
+  float _isTop = step(0.999, vFaceShade);
+  surfaceAlbedo *= mix(_aoFactor, 1.0, _isTop);
+}
+`,
+      };
+    }
+
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -267,24 +392,12 @@ export interface TerrainMaterials {
  * When `USE_ATLAS` is `false`, falls back to the legacy vertex-color path
  * (plain StandardMaterial with `useVertexColors`, no texture).
  */
-export function createTerrainMaterials(scene: Scene): TerrainMaterials {
-  if (!USE_ATLAS) {
-    // Legacy vertex-color fallback.
-    const opaque = new StandardMaterial("terrain-opaque", scene);
-    opaque.diffuseColor = new Color3(1, 1, 1);
-    opaque.specularColor = new Color3(0, 0, 0);
-    opaque.backFaceCulling = true;
-
-    const transparent = new StandardMaterial("terrain-transparent", scene);
-    transparent.diffuseColor = new Color3(1, 1, 1);
-    transparent.specularColor = new Color3(0, 0, 0);
-    transparent.alpha = TRANSPARENT_ALPHA;
-    transparent.backFaceCulling = false;
-
-    return { opaque, transparent };
-  }
-
-  // Build the atlas texture once, shared by both materials.
+/**
+ * Test/seam helper: build the shared atlas RawTexture (used by both paths).
+ * Exported so the PBR path can be unit-tested directly without flipping the
+ * compile-time USE_PBR_TERRAIN flag.
+ */
+export function buildAtlasTexture(scene: Scene): RawTexture {
   // PRIMARY FIX: generateMipMaps=false + NEAREST_SAMPLINGMODE
   //
   // With generateMipMaps=true + NEAREST_NEAREST_MIPLINEAR, the GPU spikes
@@ -309,6 +422,34 @@ export function createTerrainMaterials(scene: Scene): TerrainMaterials {
     Texture.NEAREST_SAMPLINGMODE,
   );
   atlasTex.name = "terrain-atlas";
+  return atlasTex;
+}
+
+export function createTerrainMaterials(scene: Scene): TerrainMaterials {
+  if (!USE_ATLAS) {
+    // Legacy vertex-color fallback.
+    const opaque = new StandardMaterial("terrain-opaque", scene);
+    opaque.diffuseColor = new Color3(1, 1, 1);
+    opaque.specularColor = new Color3(0, 0, 0);
+    opaque.backFaceCulling = true;
+
+    const transparent = new StandardMaterial("terrain-transparent", scene);
+    transparent.diffuseColor = new Color3(1, 1, 1);
+    transparent.specularColor = new Color3(0, 0, 0);
+    transparent.alpha = TRANSPARENT_ALPHA;
+    transparent.backFaceCulling = false;
+
+    return { opaque, transparent };
+  }
+
+  // Build the atlas texture once, shared by both materials.
+  const atlasTex = buildAtlasTexture(scene);
+
+  // Phase 6d: when the flag is ON, build the PBR pair sharing this atlas.
+  // When OFF (default), fall through to the unchanged StandardMaterial body.
+  if (USE_PBR_TERRAIN) {
+    return createPbrTerrainMaterials(scene, atlasTex);
+  }
 
   // Opaque material: full backface culling.
   // diffuseColor(1,1,1) ensures the constructor default is explicit — the
@@ -332,6 +473,37 @@ export function createTerrainMaterials(scene: Scene): TerrainMaterials {
   transparent.alpha = TRANSPARENT_ALPHA;
   transparent.backFaceCulling = false;
   new AtlasMaterialPlugin(transparent, atlasTex);
+
+  return { opaque, transparent };
+}
+
+/**
+ * Phase 6d PBR terrain pair. Builds two shared {@link PBRMaterial}s (opaque +
+ * transparent) that reuse the SAME albedo atlas via {@link PbrAtlasMaterialPlugin}.
+ * metallic 0 + uniform roughness = matte voxel surface; IBL (scene.environmentTexture,
+ * wired in main.ts) provides image-based fill on top of sun + hemi + CSM.
+ *
+ * Mirrors the StandardMaterial pair's culling + transparent alpha so the visual
+ * structure (both-sided water/glass/leaves) is preserved.
+ */
+export function createPbrTerrainMaterials(scene: Scene, atlasTex: RawTexture): TerrainMaterials {
+  const opaque = new PBRMaterial("terrain-opaque-pbr", scene);
+  opaque.metallic = 0;
+  opaque.roughness = PBR_TERRAIN_ROUGHNESS;
+  // Atlas already encodes base color; keep the albedo channel neutral white so
+  // the plugin's surfaceAlbedo write is the sole hue source.
+  opaque.albedoColor = new Color3(1, 1, 1);
+  opaque.backFaceCulling = true;
+  new PbrAtlasMaterialPlugin(opaque, atlasTex);
+
+  const transparent = new PBRMaterial("terrain-transparent-pbr", scene);
+  transparent.metallic = 0;
+  transparent.roughness = PBR_TERRAIN_ROUGHNESS;
+  transparent.albedoColor = new Color3(1, 1, 1);
+  transparent.alpha = TRANSPARENT_ALPHA;
+  transparent.transparencyMode = PBRMaterial.MATERIAL_ALPHABLEND;
+  transparent.backFaceCulling = false;
+  new PbrAtlasMaterialPlugin(transparent, atlasTex);
 
   return { opaque, transparent };
 }

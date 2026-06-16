@@ -12,7 +12,14 @@ import type { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 // Required to augment Material with .pluginManager (side-effect import).
 import "@babylonjs/core/Materials/materialPluginManager";
 
-import { createTerrainMaterials, USE_PBR_TERRAIN, PBR_TERRAIN_ROUGHNESS } from "./terrain-material";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
+import {
+  createTerrainMaterials,
+  createPbrTerrainMaterials,
+  buildAtlasTexture,
+  USE_PBR_TERRAIN,
+  PBR_TERRAIN_ROUGHNESS,
+} from "./terrain-material";
 
 let engine: NullEngine;
 let scene: Scene;
@@ -206,5 +213,64 @@ describe("USE_PBR_TERRAIN flag (Phase 6d)", () => {
     const mats = createTerrainMaterials(scene);
     expect(mats.opaque).toBeInstanceOf(StandardMaterial);
     expect(mats.transparent).toBeInstanceOf(StandardMaterial);
+  });
+});
+
+describe("PBR terrain path (Phase 6d, flag ON)", () => {
+  it("builds a PBRMaterial pair without throwing under NullEngine", () => {
+    const atlas = buildAtlasTexture(scene);
+    let mats: ReturnType<typeof createPbrTerrainMaterials> | undefined;
+    expect(() => {
+      mats = createPbrTerrainMaterials(scene, atlas);
+    }).not.toThrow();
+    expect(mats?.opaque).toBeInstanceOf(PBRMaterial);
+    expect(mats?.transparent).toBeInstanceOf(PBRMaterial);
+  });
+
+  it("opaque PBR material is non-metal with the uniform roughness", () => {
+    const atlas = buildAtlasTexture(scene);
+    const mats = createPbrTerrainMaterials(scene, atlas);
+    const opaque = mats.opaque as PBRMaterial;
+    expect(opaque.metallic).toBe(0);
+    expect(opaque.roughness).toBe(PBR_TERRAIN_ROUGHNESS);
+    expect(opaque.backFaceCulling).toBe(true);
+  });
+
+  it("transparent PBR material alpha-blends both sides", () => {
+    const atlas = buildAtlasTexture(scene);
+    const mats = createPbrTerrainMaterials(scene, atlas);
+    const t = mats.transparent as PBRMaterial;
+    expect(t.alpha).toBeLessThan(1);
+    expect(t.backFaceCulling).toBe(false);
+  });
+
+  it("both PBR materials reuse the EXACT atlas instance passed in (no rebuild)", () => {
+    // Build the one shared atlas instance explicitly so we can check identity.
+    const atlas = buildAtlasTexture(scene);
+    const mats = createPbrTerrainMaterials(scene, atlas);
+    const opaqueTex = (mats.opaque as PBRMaterial).getActiveTextures();
+    const transparentTex = (mats.transparent as PBRMaterial).getActiveTextures();
+    // Object-identity assertions: the passed `atlas` instance must appear in both
+    // materials' active-texture lists (not just a same-named copy).
+    // toContain uses Object.is / === semantics, so a freshly-built atlas would fail.
+    expect(opaqueTex).toContain(atlas);
+    expect(transparentTex).toContain(atlas);
+    // Belt-and-suspenders: find by identity and confirm it IS the same reference.
+    expect(opaqueTex.find((t) => t === atlas)).toBe(atlas);
+    expect(transparentTex.find((t) => t === atlas)).toBe(atlas);
+  });
+
+  it("PBR plugin injects the atlas lookup at CUSTOM_FRAGMENT_UPDATE_ALBEDO", () => {
+    const atlas = buildAtlasTexture(scene);
+    const mats = createPbrTerrainMaterials(scene, atlas);
+    const opaque = mats.opaque as PBRMaterial;
+    const plugin = opaque.pluginManager?.getPlugin("PbrAtlasPlugin");
+    expect(plugin).not.toBeNull();
+    const frag = plugin?.getCustomCode("fragment") ?? null;
+    expect(frag).not.toBeNull();
+    expect(frag?.["CUSTOM_FRAGMENT_UPDATE_ALBEDO"]).toContain("surfaceAlbedo");
+    expect(frag?.["CUSTOM_FRAGMENT_UPDATE_ALBEDO"]).toContain("atlasSampler");
+    // It must NOT write baseColor (that is the StandardMaterial point).
+    expect(frag?.["CUSTOM_FRAGMENT_UPDATE_ALBEDO"]).not.toContain("baseColor");
   });
 });

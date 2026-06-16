@@ -219,6 +219,7 @@ export class Player {
     this.feet = { x: spawn.x, y: spawn.y, z: spawn.z };
     this.physics = makePhysicsState();
     this.survival = makeSurvivalState();
+    this.effects.list.length = 0;
   }
 }
 

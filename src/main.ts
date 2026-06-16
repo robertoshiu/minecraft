@@ -730,6 +730,18 @@ function handleClick(button: number): void {
     }
   }
 
+  // Bow: RMB-down begins charging regardless of where the crosshair points — a
+  // bow aims at distant/empty space, so it must NOT be gated by the near-block
+  // (hit === null) guard below. Release (mouseup) fires the arrow.
+  if (button === 2) {
+    const bowSlot = player.hotbar.selected;
+    const bowHeld = player.inventory.get(bowSlot);
+    if (bowHeld !== null && bowHeld.itemId === Items.BOW) {
+      bowChargeStartMs = performance.now();
+      return;
+    }
+  }
+
   if (hit === null) return;
   if (button === 0) {
     // Start (or retarget) the mining timer; the fixed tick does the breaking.
@@ -770,11 +782,6 @@ function handleClick(button: number): void {
     const slot = player.hotbar.selected;
     const held = player.inventory.get(slot);
     if (held === null || held.count <= 0) return;
-    // Bow: begin charging on RMB-down; release fires on RMB-up (mouseup handler).
-    if (held.itemId === Items.BOW) {
-      bowChargeStartMs = performance.now();
-      return; // do NOT fall through to resolveUse / placeBlock
-    }
     const def = getItemDef(held.itemId);
     const action = resolveUse(def, { hungry: player.survival.food < HUNGER.MAX_FOOD });
     if (action.kind === "eat") {

@@ -475,6 +475,9 @@ function applyPrefs(p: Prefs): void {
     audioEngine.setVolume("sfx", currentPrefs.sfxVolume);
     audioEngine.setVolume("ambient", currentPrefs.ambientVolume);
   }
+
+  // Tone-mapping / color grade (Phase 6c). No-op if post-FX is unavailable.
+  postFXController?.setToneMappingMode(currentPrefs.toneMappingMode);
 }
 
 // Apply defaults immediately so the camera starts with reasonable values.

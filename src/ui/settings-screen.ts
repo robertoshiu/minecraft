@@ -11,7 +11,7 @@
  * Styled with DESIGN.md tokens.
  */
 
-import { clampPrefs, type Prefs } from "../game/preferences";
+import { clampPrefs, type Prefs, type ToneMappingMode } from "../game/preferences";
 import {
   type ColorblindMode,
   setColorblindMode,
@@ -256,8 +256,10 @@ export class SettingsScreen {
 
   private dropdowns: {
     colorblindMode: HTMLSelectElement | null;
+    toneMappingMode: HTMLSelectElement | null;
   } = {
     colorblindMode: null,
+    toneMappingMode: null,
   };
 
   private build(): void {
@@ -348,6 +350,23 @@ export class SettingsScreen {
       if (this.currentPrefs !== null) { this.currentPrefs.filmGrainEnabled = v; emit(); }
     });
 
+    const toneOptions: ReadonlyArray<{ label: string; value: ToneMappingMode }> = [
+      { label: "Golden Hour", value: "goldenHour" },
+      { label: "Neutral", value: "neutral" },
+    ];
+    this.dropdowns.toneMappingMode = addDropdown(
+      card,
+      "Color Grade",
+      toneOptions,
+      "goldenHour",
+      (v) => {
+        if (this.currentPrefs !== null) {
+          this.currentPrefs.toneMappingMode = v as ToneMappingMode;
+          emit();
+        }
+      },
+    );
+
     addSection("Accessibility");
     const colorblindOptions: ReadonlyArray<{ label: string; value: ColorblindMode }> = [
       { label: "None", value: "none" },
@@ -420,6 +439,9 @@ export class SettingsScreen {
     }
     if (this.dropdowns.colorblindMode !== null) {
       this.dropdowns.colorblindMode.value = prefs.colorblindMode;
+    }
+    if (this.dropdowns.toneMappingMode !== null) {
+      this.dropdowns.toneMappingMode.value = prefs.toneMappingMode;
     }
     if (this.sliders.uiScale !== null) {
       this.sliders.uiScale.value = String(prefs.uiScale);

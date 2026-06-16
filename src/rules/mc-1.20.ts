@@ -296,6 +296,24 @@ export const SMELT = {
   TICKS_PER_ITEM: 200,
 } as const;
 
+// ---------------------------------------------------------------------------
+// Fire / lava damage-over-time (Phase 6b)
+// ---------------------------------------------------------------------------
+
+/** Lava/fire burning damage-over-time tuning (20 TPS). */
+export const FIRE = {
+  /** Ticks of burning set/refreshed each tick the player is in/on lava. */
+  IGNITE_TICKS: 30,
+  /** Half-hearts dealt per fire-damage interval. */
+  DAMAGE: 1,
+  /**
+   * Ticks between fire-damage applications. MUST be >= the 10-tick i-frame
+   * window (combat/iframes) or the periodic fire hit is swallowed by i-frames.
+   * 10 → 1 dmg every 10 ticks ≈ 2 HP/s, matching MC lava.
+   */
+  DAMAGE_INTERVAL: 10,
+} as const;
+
 export const FUEL_VALUES: Record<string, number> = {
   coal: 8,
   coal_block: 80,

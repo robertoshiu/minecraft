@@ -36,14 +36,14 @@ import { raycastVoxel } from "./interaction/raycast";
 import { breakBlock, placeBlock } from "./interaction/edit";
 import { resolveUse } from "./interaction/use-item";
 import { breakTicks } from "./interaction/mining";
-import { getItemDef, Items } from "./rules/items";
+import { getItemDef, Items, isSplashPotion, arrowEffectOf, potionEffectOf } from "./rules/items";
 import { updateHotbarHud } from "./ui/hotbar-hud";
 import { updateSurvivalHud } from "./ui/survival-hud";
 import { updateArmorHud } from "./ui/armor-hud";
 import { isTool, damageTool } from "./inventory/stack";
 import { Inventory } from "./inventory/inventory";
 import { makeDefaultInventory } from "./inventory/default-inventory";
-import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME, ARROW, FIRE } from "./rules/mc-1.20";
+import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME, ARROW, FIRE, SPLASH, EFFECT_TUNING } from "./rules/mc-1.20";
 import { nextBurningTicks, fireDamageDue } from "./combat/fire";
 import { applyPlayerDamage } from "./combat/player-damage";
 import { makeClock, advance, tickOfDay, dayNumber } from "./time/clock";
@@ -61,6 +61,11 @@ import { ArrowManager, canFireArrow } from "./arrows/manager";
 import { ArrowRenderer } from "./rendering/arrow-renderer";
 import { arrowStep } from "./arrows/physics";
 import { launchFrom, bowChargeToSpeed } from "./arrows/entity";
+import { SplashPotionManager, canThrowSplash } from "./potions/manager";
+import { launchSplashFrom } from "./potions/entity";
+import { splashPotionStep } from "./potions/physics";
+import { splashTargets } from "./potions/aoe";
+import { SplashPotionRenderer } from "./rendering/splash-renderer";
 import { deserializeMobs } from "./mobs/persistence";
 import { InventoryScreen } from "./ui/inventory-screen";
 import { PauseMenu } from "./ui/pause-menu";
@@ -219,6 +224,10 @@ const arrowManager = new ArrowManager();
 const arrowRenderer = new ArrowRenderer(scene, shadowGenerator ?? undefined);
 /** Wall-clock ms when the bow charge began, or null when not charging. */
 let bowChargeStartMs: number | null = null;
+
+// --- Thrown splash potions: manager (pure registry) + Babylon renderer ------
+const splashManager = new SplashPotionManager();
+const splashRenderer = new SplashPotionRenderer(scene);
 
 // --- Audio: procedural Web Audio synthesis engine + game-level mapping -----
 // Construction is guarded: if AudioContext is unavailable (headless, Node, or
@@ -771,6 +780,30 @@ function handleClick(button: number): void {
     }
   }
 
+  // Splash potion: RMB throws it regardless of where the crosshair points (no
+  // hit===null guard above this). This MUST come before the hit===null guard and
+  // BEFORE resolveUse's drink branch — splash potions are thrown, not drunk.
+  if (button === 2) {
+    const splashSlot = player.hotbar.selected;
+    const splashHeld = player.inventory.get(splashSlot);
+    if (splashHeld !== null && splashHeld.count > 0 && isSplashPotion(splashHeld.itemId)) {
+      if (!pointerLocked() || uiBlockingGameplay()) return;
+      if (!canThrowSplash(splashManager.count())) return;
+      const fx = potionEffectOf(splashHeld.itemId);
+      if (fx !== null) {
+        const splashEye = player.eyePosition();
+        const splashFwd = camera.getDirection(Vector3.Forward());
+        const { origin: splashOrigin, velocity: splashVelocity } = launchSplashFrom(
+          splashEye,
+          { x: splashFwd.x, y: splashFwd.y, z: splashFwd.z },
+        );
+        splashManager.spawn(splashOrigin, splashVelocity, fx);
+        player.inventory.removeFromSlot(splashSlot, 1);
+      }
+      return;
+    }
+  }
+
   if (hit === null) return;
   if (button === 0) {
     // Start (or retarget) the mining timer; the fixed tick does the breaking.
@@ -890,22 +923,28 @@ canvas.addEventListener("mouseup", (e) => {
     const slot = player.hotbar.selected;
     const held = player.inventory.get(slot);
     if (held === null || held.itemId !== Items.BOW) return;
-    // Find the first slot holding arrows (Inventory has no findSlot — scan).
+    // Find the first slot holding plain OR tipped arrows (scan; first wins).
     let arrowSlot = -1;
     for (let i = 0; i < Inventory.SLOTS; i++) {
       const st = player.inventory.get(i);
-      if (st !== null && st.itemId === Items.ARROW && st.count > 0) {
+      if (
+        st !== null &&
+        st.count > 0 &&
+        (st.itemId === Items.ARROW || st.itemId === Items.TIPPED_ARROW)
+      ) {
         arrowSlot = i;
         break;
       }
     }
     if (arrowSlot < 0) return; // no arrows
     if (!canFireArrow(arrowManager.count())) return; // pooled/capped
+    const ammo = player.inventory.get(arrowSlot)!;
+    const tipped = arrowEffectOf(ammo.itemId) ?? undefined;
     const eye = player.eyePosition();
     const fwd = camera.getDirection(Vector3.Forward());
     const speed = bowChargeToSpeed(chargeMs);
     const { origin, velocity } = launchFrom(eye, { x: fwd.x, y: fwd.y, z: fwd.z }, speed);
-    arrowManager.spawn(origin, velocity);
+    arrowManager.spawn(origin, velocity, -1, tipped);
     player.inventory.removeFromSlot(arrowSlot, 1);
     // TODO(audio): replace placeholder mob-hurt SFX with a real bow-twang cue.
     gameAudio?.onMobHurt(eye);
@@ -962,6 +1001,8 @@ function respawnPlayer(): void {
   player.respawn(spawnPoint); // also zeros burningTicks (and knockback) via Player.respawn()
   deathState.hide();
   hideDeath();
+  // Despawn any in-flight splash potions so they don't burst stale after death.
+  for (const p of splashManager.all()) splashManager.despawn(p.id);
   // Drop any accumulated frame time so play resumes cleanly (no tick storm).
   accumulator = 0;
   lastTime = performance.now();
@@ -1092,10 +1133,51 @@ engine.runRenderLoop(() => {
       );
       if (hit.kind === "mob") {
         attackMob(hit.mob, currentTick, ARROW.DAMAGE, hit.fromXZ);
+        // Tipped arrow: instant effects add bonus damage to the mob. Non-instant
+        // effects require a mob EffectState (deferred to 6c) — ignored here.
+        const arrowFx = arrow.potionEffect;
+        if (arrowFx !== undefined && isInstant(arrowFx.type) && arrowFx.type === "instant_damage") {
+          attackMob(hit.mob, currentTick, EFFECT_TUNING.INSTANT_DAMAGE_PER_LEVEL * (arrowFx.amplifier + 1));
+        }
         gameAudio?.onMobHurt(hit.mob.feet);
       }
       if (arrow.isDone(ARROW.MAX_AGE)) {
         arrowManager.despawn(arrow.id);
+      }
+    }
+
+    // Step in-flight splash potions: burst on block/mob hit, apply AoE.
+    for (const potion of splashManager.all()) {
+      const sh = splashPotionStep(
+        potion,
+        (bx, by, bz) => world.getBlock(bx, by, bz),
+        liveMobs,
+      );
+      if (sh.kind === "burst") {
+        const { mobs: hitMobs, playerInRange } = splashTargets(
+          sh.at,
+          player.feet,
+          liveMobs,
+          SPLASH.RADIUS,
+        );
+        // Mobs have no effects channel → plain instant damage on harmful splashes.
+        const potFx = potion.effect;
+        const harmful = potFx.type === "instant_damage" || potFx.type === "poison";
+        if (harmful) {
+          for (const m of hitMobs) attackMob(m, currentTick, SPLASH.MOB_DAMAGE);
+        }
+        // Player in range → apply the real effect (instant or timed).
+        if (playerInRange) {
+          if (isInstant(potFx.type)) {
+            applyInstant(player.survival, potFx.type, potFx.amplifier);
+          } else {
+            applyEffect(player.effects, potFx.type, potFx.amplifier, potFx.durationTicks);
+          }
+        }
+        gameEffects?.onExplosion(sh.at);
+      }
+      if (potion.isDone(SPLASH.MAX_AGE)) {
+        splashManager.despawn(potion.id);
       }
     }
 
@@ -1167,6 +1249,8 @@ engine.runRenderLoop(() => {
 
   // Reconcile arrow boxes with the live arrow set.
   arrowRenderer.sync(arrowManager.all(), performance.now());
+  // Reconcile splash-potion spheres with the live set.
+  splashRenderer.sync(splashManager.all(), performance.now());
 
   scene.render();
 

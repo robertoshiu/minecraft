@@ -41,6 +41,8 @@ export interface PlayerSave {
   equipment: (ItemStackSave | null)[];
   /** Active status effects. Added in save v5; absent in older saves (migrated with []). */
   effects: EffectSave[];
+  /** Off-hand carry slot. Added in save v6; default null on older saves. */
+  offhand: ItemStackSave | null;
 }
 
 /** A single inventory slot's item. Tools carry durability; most items don't. */
@@ -198,11 +200,13 @@ const SAVE_MAGIC = 0x4d43_5357; // "MCSW" (Minecraft Save World), as a u32
  *  - 3: …plus spawnX/spawnY/spawnZ (f64×3) appended at the end of the player record.
  *  - 4: …plus a length-prefixed equipment slot array at the end of the player record.
  *  - 5: …plus a length-prefixed status-effects array at the end of the player record.
+ *  - 6: …plus a single off-hand slot record at the end of the player record.
  * Older containers are still readable (spawn defaults to the player position;
  * equipment defaults to all-null on containers older than format 4;
- * effects default to empty on containers older than format 5).
+ * effects default to empty on containers older than format 5;
+ * the off-hand defaults to null on containers older than format 6).
  */
-const SAVE_FORMAT = 5;
+const SAVE_FORMAT = 6;
 /** The lowest container format this build can still decode. */
 const SAVE_FORMAT_MIN = 1;
 
@@ -405,6 +409,27 @@ function writePlayer(w: ByteWriter, p: PlayerSave): void {
     w.i32(fx.amplifier);
     w.i32(fx.ticksRemaining);
   }
+
+  // Off-hand slot (added in container format 6). A single presence-flagged
+  // slot record — not length-prefixed (it is always exactly one slot).
+  if (p.offhand === null) {
+    w.u8(SLOT_EMPTY);
+  } else {
+    w.u8(SLOT_PRESENT);
+    w.i32(p.offhand.itemId);
+    w.i32(p.offhand.count);
+    w.i32(p.offhand.maxStack);
+    const hasDur =
+      p.offhand.durability !== undefined &&
+      p.offhand.maxDurability !== undefined;
+    if (hasDur) {
+      w.u8(DURABILITY_PRESENT);
+      w.i32(p.offhand.durability ?? 0);
+      w.i32(p.offhand.maxDurability ?? 0);
+    } else {
+      w.u8(DURABILITY_ABSENT);
+    }
+  }
 }
 
 function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
@@ -487,6 +512,25 @@ function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
     }
   }
 
+  // Off-hand (added in container format 6). Older containers → null.
+  let offhand: ItemStackSave | null = null;
+  if (containerFormat >= 6) {
+    const present = r.u8();
+    if (present === SLOT_PRESENT) {
+      const itemId = r.i32();
+      const count = r.i32();
+      const maxStack = r.i32();
+      const durFlag = r.u8();
+      if (durFlag === DURABILITY_PRESENT) {
+        const durability = r.i32();
+        const maxDurability = r.i32();
+        offhand = { itemId, count, maxStack, durability, maxDurability };
+      } else {
+        offhand = { itemId, count, maxStack };
+      }
+    }
+  }
+
   return {
     x,
     y,
@@ -503,6 +547,7 @@ function readPlayer(r: ByteReader, containerFormat: number): PlayerSave {
     spawnZ,
     equipment,
     effects,
+    offhand,
   };
 }
 

@@ -124,6 +124,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
         { type: 5, amplifier: 1, ticksRemaining: 600 }, // strength II
         { type: 0, amplifier: 0, ticksRemaining: 200 }, // regeneration I
       ],
+      offhand: { itemId: 257, count: 1, maxStack: 1, durability: 50, maxDurability: 250 },
     };
   }
 
@@ -161,6 +162,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
     expect(round.player.inventory).toEqual(player.inventory);
     expect(round.player.equipment).toEqual(player.equipment);
     expect(round.player.effects).toEqual(player.effects);
+    expect(round.player.offhand).toEqual(player.offhand);
 
     // The tool slot specifically retains durability + maxDurability.
     const tool = round.player.inventory[2];
@@ -229,6 +231,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
         spawnZ: 0,
         equipment: [],
         effects: [],
+        offhand: null,
       },
       columns: {},
     };
@@ -254,6 +257,7 @@ describe("serializeSave / deserializeSave (player + binary columns)", () => {
       spawnZ: 0,
       equipment: [],
       effects: [],
+      offhand: null,
     };
   }
 

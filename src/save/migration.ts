@@ -11,7 +11,7 @@
 import { type WorldSave } from "./serialize";
 
 /** The current on-disk save version this build writes and reads natively. */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** Transforms a save from version `k` to version `k+1`. */
 export type Migration = (data: WorldSave) => WorldSave;
@@ -30,6 +30,7 @@ export type Migration = (data: WorldSave) => WorldSave;
  *   v3 saves predate armor persistence, so all four slots default to null.
  * - `MIGRATIONS[4]` (v4 -> v5): adds the effects array to the player record.
  *   v4 saves predate status-effect persistence, so the list defaults to empty.
+ * - `MIGRATIONS[5]` (v5 -> v6): adds the off-hand slot to the player record (defaults to null).
  */
 export const MIGRATIONS: Record<number, Migration> = {
   1: (data) => ({ ...data, version: 2, mobs: [] }),
@@ -57,6 +58,14 @@ export const MIGRATIONS: Record<number, Migration> = {
     player: {
       ...data.player,
       effects: [],
+    },
+  }),
+  5: (data) => ({
+    ...data,
+    version: 6,
+    player: {
+      ...data.player,
+      offhand: null,
     },
   }),
 };

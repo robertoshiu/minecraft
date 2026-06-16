@@ -24,6 +24,7 @@ function emptyPlayer(): PlayerSave {
     spawnZ: 0,
     equipment: [],
     effects: [],
+    offhand: null,
   };
 }
 
@@ -114,8 +115,8 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     expect(() => migrate(saveAt(0), 1)).toThrow(/did not advance/);
   });
 
-  it("exposes SAVE_VERSION = 5 and a MIGRATIONS registry", () => {
-    expect(SAVE_VERSION).toBe(5);
+  it("exposes SAVE_VERSION = 6 and a MIGRATIONS registry", () => {
+    expect(SAVE_VERSION).toBe(6);
     expect(typeof MIGRATIONS).toBe("object");
   });
 
@@ -156,5 +157,12 @@ describe("migration pipeline (D3: never hard-fail when a path exists, never corr
     const out = MIGRATIONS[4]!(v4);
     expect(out.version).toBe(5);
     expect(out.player.effects).toEqual([]);
+  });
+
+  it("MIGRATIONS[5] adds a null off-hand (v5 → v6)", () => {
+    const v5 = saveAt(5, 99);
+    const out = MIGRATIONS[5]!(v5);
+    expect(out.version).toBe(6);
+    expect(out.player.offhand).toBeNull();
   });
 });

@@ -61,6 +61,12 @@ function snapshotEffects(player: Player): EffectSave[] {
   }));
 }
 
+/** Snapshot the off-hand carry slot into save shape (null when empty). */
+function snapshotOffhand(eq: Equipment): ItemStackSave | null {
+  const stack = eq.getOffhand();
+  return stack === null ? null : toItemSave(stack);
+}
+
 /** Snapshot the 4 armor slots [helmet, chestplate, leggings, boots] into save shape. */
 function snapshotEquipment(eq: Equipment): (ItemStackSave | null)[] {
   return ARMOR_SLOTS.map((slot) => {
@@ -109,6 +115,7 @@ export function buildWorldSave(
     spawnZ: sp.z,
     equipment: snapshotEquipment(player.equipment),
     effects: snapshotEffects(player),
+    offhand: snapshotOffhand(player.equipment),
   };
 
   const columns: Record<string, Uint8Array> = {};

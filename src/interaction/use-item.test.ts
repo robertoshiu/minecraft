@@ -26,4 +26,13 @@ describe("resolveUse", () => {
     expect(resolveUse(def, { hungry: true })).toEqual({ kind: "equip" });
     expect(resolveUse(def, { hungry: false })).toEqual({ kind: "equip" });
   });
+  it("potion → drink (regardless of hunger)", () => {
+    const def = getItemDef(Items.POTION_HEALING);
+    expect(resolveUse(def, { hungry: true })).toEqual({ kind: "drink" });
+    expect(resolveUse(def, { hungry: false })).toEqual({ kind: "drink" });
+  });
+  it("bow → use-other (no right-click action; charge is mousedown glue)", () => {
+    const def = getItemDef(Items.BOW);
+    expect(resolveUse(def, { hungry: true })).toEqual({ kind: "use-other" });
+  });
 });

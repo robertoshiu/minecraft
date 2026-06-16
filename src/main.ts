@@ -78,7 +78,7 @@ import { GameEffects } from "./effects/game-effects";
 import { initPostFX, type PostFXController } from "./rendering/post-fx";
 import { HintManager } from "./ui/hints";
 import { Equipment, ARMOR_SLOTS } from "./inventory/equipment";
-import { tickEffects, swiftnessMultiplier, strengthBonus } from "./effects/status";
+import { tickEffects, swiftnessMultiplier, strengthBonus, applyEffect, applyInstant, isInstant } from "./effects/status";
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
@@ -762,6 +762,18 @@ function handleClick(button: number): void {
         const prev = player.equipment.equip(armorSlot, held);
         // The held piece is now worn; the bag slot takes whatever it displaced.
         player.inventory.set(slot, prev);
+      }
+      return;
+    }
+    if (action.kind === "drink") {
+      const fx = def.potionEffect;
+      if (fx !== undefined) {
+        if (isInstant(fx.type)) {
+          applyInstant(player.survival, fx.type, fx.amplifier);
+        } else {
+          applyEffect(player.effects, fx.type, fx.amplifier, fx.durationTicks);
+        }
+        player.inventory.removeFromSlot(slot, 1);
       }
       return;
     }

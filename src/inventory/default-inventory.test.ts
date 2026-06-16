@@ -47,4 +47,13 @@ describe("makeDefaultInventory", () => {
       }
     }
   });
+  it("seeds the Phase-5 bow, arrows, and potions in slots 13-17", () => {
+    const inv = makeDefaultInventory();
+    expect(inv.get(13)?.itemId).toBe(Items.BOW);
+    expect(inv.get(14)?.itemId).toBe(Items.ARROW);
+    expect(inv.get(14)?.count).toBe(32);
+    expect(inv.get(15)?.itemId).toBe(Items.POTION_HEALING);
+    expect(inv.get(16)?.itemId).toBe(Items.POTION_STRENGTH);
+    expect(inv.get(17)?.itemId).toBe(Items.POTION_SWIFTNESS);
+  });
 });

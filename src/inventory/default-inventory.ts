@@ -29,5 +29,11 @@ export function makeDefaultInventory(): Inventory {
   inv.set(10, makeArmorStack(Items.IRON_CHESTPLATE));
   inv.set(11, makeArmorStack(Items.IRON_LEGGINGS));
   inv.set(12, makeArmorStack(Items.IRON_BOOTS));
+  // Ranged + potions (Phase 5) — bow + a quiver + a few drinkables to try.
+  inv.set(13, makeStack(Items.BOW, 1, 1));
+  inv.set(14, makeStack(Items.ARROW, 32));
+  inv.set(15, makeStack(Items.POTION_HEALING, 1, 1));
+  inv.set(16, makeStack(Items.POTION_STRENGTH, 1, 1));
+  inv.set(17, makeStack(Items.POTION_SWIFTNESS, 1, 1));
   return inv;
 }

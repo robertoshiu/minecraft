@@ -16,6 +16,7 @@ import type { ItemDef } from "../rules/items";
 export type UseAction =
   | { kind: "eat" }
   | { kind: "equip" }
+  | { kind: "drink" }
   | { kind: "place" }
   | { kind: "use-other" }
   | { kind: "none" };
@@ -37,6 +38,9 @@ export interface UseContext {
 export function resolveUse(def: ItemDef, ctx: UseContext): UseAction {
   if (def.kind === "food") {
     return ctx.hungry ? { kind: "eat" } : { kind: "none" };
+  }
+  if (def.kind === "potion") {
+    return { kind: "drink" };
   }
   if (def.kind === "armor") {
     return { kind: "equip" };

@@ -22,7 +22,7 @@ import { ARROW } from "../rules/mc-1.20";
 export type ArrowHit =
   | { kind: "none" }
   | { kind: "block" }
-  | { kind: "mob"; mob: Mob };
+  | { kind: "mob"; mob: Mob; fromXZ: { x: number; z: number } };
 
 /** Distance from `a` to `b`. */
 function dist(a: Vec3, b: Vec3): number {
@@ -81,12 +81,14 @@ export function arrowStep(
   const mob = pickMob(from, dir, mobReach, mobs);
 
   if (mob !== null) {
-    // Move the arrow to the mob's center plane (good enough visual stick; the
-    // arrow is consumed this tick anyway).
+    // Move the arrow to the mob's center plane (visual stick; consumed this tick).
+    // fromXZ is the arrow's pre-hit position so the caller knocks the mob ALONG
+    // travel (away from where the arrow came from), not in a fixed direction.
+    const fromXZ = { x: from.x, z: from.z };
     arrow.feet = { x: mob.feet.x, y: mob.feet.y + 0.5, z: mob.feet.z };
     arrow.hitMob = true;
     arrow.velocity = { x: 0, y: 0, z: 0 };
-    return { kind: "mob", mob };
+    return { kind: "mob", mob, fromXZ };
   }
 
   if (blockHit !== null) {

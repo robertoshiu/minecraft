@@ -857,7 +857,8 @@ canvas.addEventListener("mouseup", (e) => {
     const { origin, velocity } = launchFrom(eye, { x: fwd.x, y: fwd.y, z: fwd.z }, speed);
     arrowManager.spawn(origin, velocity);
     player.inventory.removeFromSlot(arrowSlot, 1);
-    gameAudio?.onMobHurt(eye); // placeholder bow-twang via existing audio hook
+    // TODO(audio): replace placeholder mob-hurt SFX with a real bow-twang cue.
+    gameAudio?.onMobHurt(eye);
   }
 });
 
@@ -1014,10 +1015,7 @@ engine.runRenderLoop(() => {
         liveMobs,
       );
       if (hit.kind === "mob") {
-        attackMob(hit.mob, currentTick, ARROW.DAMAGE, {
-          x: arrow.feet.x,
-          z: arrow.feet.z,
-        });
+        attackMob(hit.mob, currentTick, ARROW.DAMAGE, hit.fromXZ);
         gameAudio?.onMobHurt(hit.mob.feet);
       }
       if (arrow.isDone(ARROW.MAX_AGE)) {

@@ -31,7 +31,12 @@ describe("arrowStep", () => {
     const a = new Arrow(3, { x: 0, y: 80.9, z: 0 }, { x: 3, y: 0, z: 0 });
     const hit = arrowStep(a, AIR, [mob]);
     expect(hit.kind).toBe("mob");
-    if (hit.kind === "mob") expect(hit.mob.id).toBe(7);
+    if (hit.kind === "mob") {
+      expect(hit.mob.id).toBe(7);
+      // fromXZ is the arrow's PRE-hit origin (≈ x:0), NOT the mob center (x:2),
+      // so knockbackImpulse(fromXZ, mob.feet) pushes the mob +X (away from shooter).
+      expect(hit.fromXZ.x).toBeLessThan(mob.feet.x);
+    }
     expect(a.hitMob).toBe(true);
   });
 

@@ -29,4 +29,27 @@ describe("Equipment", () => {
     expect(Equipment.slotFor(Items.DIAMOND_BOOTS)).toBe("boots");
     expect(Equipment.slotFor(Items.IRON_PICKAXE)).toBeNull();
   });
+  it("off-hand starts empty and is settable independently of armor", () => {
+    const eq = new Equipment();
+    expect(eq.getOffhand()).toBeNull();
+    const bow = makeStack(Items.BOW, 1, 1);
+    eq.setOffhand(bow);
+    expect(eq.getOffhand()).toBe(bow);
+    // Armor slots are unaffected by the off-hand.
+    for (const slot of ARMOR_SLOTS) expect(eq.get(slot)).toBeNull();
+  });
+  it("off-hand is NOT an armor slot: SLOTS stays 4 and it never feeds totalDefense", () => {
+    const eq = new Equipment();
+    // Even an armor piece carried in the off-hand confers no defense.
+    eq.setOffhand(makeStack(Items.DIAMOND_CHESTPLATE, 1, 1));
+    expect(Equipment.SLOTS).toBe(4);
+    expect(ARMOR_SLOTS).toHaveLength(4);
+    expect(eq.totalDefense()).toBe(0);
+  });
+  it("setOffhand(null) clears the slot", () => {
+    const eq = new Equipment();
+    eq.setOffhand(makeStack(Items.ARROW, 5));
+    eq.setOffhand(null);
+    expect(eq.getOffhand()).toBeNull();
+  });
 });

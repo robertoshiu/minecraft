@@ -1,7 +1,8 @@
 /**
  * equipment.ts — the player's worn-armor holder. SEPARATE from the 36-slot
  * Inventory (which is pinned at SLOTS === 36 and must never widen). Four
- * nullable armor slots keyed by ArmorSlot. Off-hand is DEFERRED.
+ * nullable armor slots keyed by ArmorSlot. Off-hand is a separate non-armor
+ * carry slot (getOffhand/setOffhand), not part of ARMOR_SLOTS.
  *
  * Pure data + small accessors: no Babylon, no world. `equip` swaps the
  * incoming piece into its slot and returns whatever was previously worn (so
@@ -39,6 +40,24 @@ export class Equipment {
   /** Force-set a slot (used by the persistence loader). */
   set(slot: ArmorSlot, stack: ItemStack | null): void {
     this.slots[slot] = stack;
+  }
+
+  /**
+   * The off-hand carry slot. SEPARATE from the 4 armor slots — it is NOT part
+   * of ARMOR_SLOTS, does NOT count toward SLOTS (which stays 4), and confers NO
+   * defense (totalDefense ignores it). It can hold ANY item; in v1 it is purely
+   * a carry slot swapped via the F key.
+   */
+  private offhand: ItemStack | null = null;
+
+  /** The item held in the off-hand, or null. */
+  getOffhand(): ItemStack | null {
+    return this.offhand ?? null;
+  }
+
+  /** Force-set the off-hand item (used by the F-key swap and the loader). */
+  setOffhand(stack: ItemStack | null): void {
+    this.offhand = stack;
   }
 
   /**

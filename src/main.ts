@@ -36,13 +36,13 @@ import { raycastVoxel } from "./interaction/raycast";
 import { breakBlock, placeBlock } from "./interaction/edit";
 import { resolveUse } from "./interaction/use-item";
 import { breakTicks } from "./interaction/mining";
-import { getItemDef } from "./rules/items";
+import { getItemDef, Items } from "./rules/items";
 import { updateHotbarHud } from "./ui/hotbar-hud";
 import { updateSurvivalHud } from "./ui/survival-hud";
 import { isTool, damageTool } from "./inventory/stack";
 import { Inventory } from "./inventory/inventory";
 import { makeDefaultInventory } from "./inventory/default-inventory";
-import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME } from "./rules/mc-1.20";
+import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME, ARROW } from "./rules/mc-1.20";
 import { makeClock, advance, tickOfDay, dayNumber } from "./time/clock";
 import { canSleep, sleepToDawn } from "./sleep/bed";
 import { skyColorAt } from "./time/sky";
@@ -54,6 +54,10 @@ import { ChunkColumn } from "./chunk/column";
 import { saveGame, loadGame, type ViewAngles } from "./game/persistence";
 import { MobDriver, pickMob, attackMob, attackDamageFor } from "./game/mob-driver";
 import { MobRenderer } from "./rendering/mob-renderer";
+import { ArrowManager, canFireArrow } from "./arrows/manager";
+import { ArrowRenderer } from "./rendering/arrow-renderer";
+import { arrowStep } from "./arrows/physics";
+import { launchFrom, bowChargeToSpeed } from "./arrows/entity";
 import { deserializeMobs } from "./mobs/persistence";
 import { InventoryScreen } from "./ui/inventory-screen";
 import { PauseMenu } from "./ui/pause-menu";
@@ -204,6 +208,12 @@ renderer.buildInitial(WORLD_RADIUS_COLUMNS);
 const mobDriver = new MobDriver(world, renderer);
 // Pass the CSM sink (or undefined for no shadows) so mob box meshes cast and receive shadows.
 const mobRenderer = new MobRenderer(scene, shadowGenerator ?? undefined);
+
+// --- Ranged system: arrow manager (pure registry) + Babylon renderer -------
+const arrowManager = new ArrowManager();
+const arrowRenderer = new ArrowRenderer(scene, shadowGenerator ?? undefined);
+/** Wall-clock ms when the bow charge began, or null when not charging. */
+let bowChargeStartMs: number | null = null;
 
 // --- Audio: procedural Web Audio synthesis engine + game-level mapping -----
 // Construction is guarded: if AudioContext is unavailable (headless, Node, or
@@ -760,6 +770,11 @@ function handleClick(button: number): void {
     const slot = player.hotbar.selected;
     const held = player.inventory.get(slot);
     if (held === null || held.count <= 0) return;
+    // Bow: begin charging on RMB-down; release fires on RMB-up (mouseup handler).
+    if (held.itemId === Items.BOW) {
+      bowChargeStartMs = performance.now();
+      return; // do NOT fall through to resolveUse / placeBlock
+    }
     const def = getItemDef(held.itemId);
     const action = resolveUse(def, { hungry: player.survival.food < HUNGER.MAX_FOOD });
     if (action.kind === "eat") {
@@ -814,7 +829,36 @@ canvas.addEventListener("mousedown", (e) => {
 });
 
 canvas.addEventListener("mouseup", (e) => {
-  if (e.button === 0) resetMining();
+  if (e.button === 0) {
+    resetMining();
+    return;
+  }
+  if (e.button === 2 && bowChargeStartMs !== null) {
+    const chargeMs = performance.now() - bowChargeStartMs;
+    bowChargeStartMs = null;
+    if (!pointerLocked() || uiBlockingGameplay()) return;
+    const slot = player.hotbar.selected;
+    const held = player.inventory.get(slot);
+    if (held === null || held.itemId !== Items.BOW) return;
+    // Find the first slot holding arrows (Inventory has no findSlot — scan).
+    let arrowSlot = -1;
+    for (let i = 0; i < Inventory.SLOTS; i++) {
+      const st = player.inventory.get(i);
+      if (st !== null && st.itemId === Items.ARROW && st.count > 0) {
+        arrowSlot = i;
+        break;
+      }
+    }
+    if (arrowSlot < 0) return; // no arrows
+    if (!canFireArrow(arrowManager.count())) return; // pooled/capped
+    const eye = player.eyePosition();
+    const fwd = camera.getDirection(Vector3.Forward());
+    const speed = bowChargeToSpeed(chargeMs);
+    const { origin, velocity } = launchFrom(eye, { x: fwd.x, y: fwd.y, z: fwd.z }, speed);
+    arrowManager.spawn(origin, velocity);
+    player.inventory.removeFromSlot(arrowSlot, 1);
+    gameAudio?.onMobHurt(eye); // placeholder bow-twang via existing audio hook
+  }
 });
 
 // --- Render diagnostics overlay (F4 toggleable) ---------------------------
@@ -961,6 +1005,26 @@ engine.runRenderLoop(() => {
     // before the death check so instant_damage etc. can be lethal this tick.
     tickEffects(player.effects, player.survival, currentTick);
 
+    // Step in-flight arrows: sweep vs blocks + mobs, apply damage, recycle.
+    const liveMobs = mobDriver.manager.all();
+    for (const arrow of arrowManager.all()) {
+      const hit = arrowStep(
+        arrow,
+        (bx, by, bz) => world.getBlock(bx, by, bz),
+        liveMobs,
+      );
+      if (hit.kind === "mob") {
+        attackMob(hit.mob, currentTick, ARROW.DAMAGE, {
+          x: arrow.feet.x,
+          z: arrow.feet.z,
+        });
+        gameAudio?.onMobHurt(hit.mob.feet);
+      }
+      if (arrow.isDone(ARROW.MAX_AGE)) {
+        arrowManager.despawn(arrow.id);
+      }
+    }
+
     // Death: the loop owns the death → screen → respawn cycle (the controller
     // no longer auto-respawns). On the rising edge, show the overlay; the
     // outer freeze (deathState.isShown()) then halts ticks until Respawn.
@@ -1023,6 +1087,9 @@ engine.runRenderLoop(() => {
 
   // Reconcile mob boxes with the live mob set (mobs move; no frozen matrices).
   mobRenderer.sync(mobDriver.manager.all(), performance.now(), clock.totalTicks);
+
+  // Reconcile arrow boxes with the live arrow set.
+  arrowRenderer.sync(arrowManager.all(), performance.now());
 
   scene.render();
 

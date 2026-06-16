@@ -38,11 +38,11 @@ import {
   makeSurvivalState,
   tickSurvival,
   addExhaustion,
-  damage,
   canSprint,
   isDead,
   type SurvivalState,
 } from "../survival/stats";
+import { applyPlayerDamage } from "../combat/player-damage";
 
 /** Per-frame movement intent (set by the input layer; read by update). */
 export interface InputState {
@@ -71,6 +71,15 @@ export class Player {
   readonly equipment: Equipment;
   /** Active status effects (potions). SEPARATE from SurvivalState. */
   readonly effects: EffectState;
+  /**
+   * Decaying horizontal knockback impulse (blocks/tick) on the XZ plane.
+   * SEPARATE from PhysicsState (vertical-only). Blended into the input-derived
+   * horizontal velocity each tick in update() and decayed toward 0 (Task 5).
+   * The upward component rides physics.vy (see applyPlayerKnockback). Transient
+   * — never persisted.
+   */
+  knockbackX = 0;
+  knockbackZ = 0;
   private readonly spawn: Vec3;
 
   constructor(spawn: Vec3) {
@@ -105,6 +114,7 @@ export class Player {
     yaw: number,
     world: World,
     speedMultiplier: number = 1,
+    currentTick: number = -1,
   ): void {
     const wasOnGround = this.physics.onGround;
 
@@ -180,7 +190,7 @@ export class Player {
     if (result.onGround && !wasOnGround) {
       const fall = onLand(this.physics);
       if (fall > 0) {
-        damage(this.survival, fall);
+        applyPlayerDamage(this, fall, currentTick, "fall");
       }
     }
 

@@ -18,16 +18,12 @@
 import { World } from "../world/world";
 import type { RemeshNotifier } from "../rendering/world-renderer";
 import type { Player } from "../player/controller";
-import { damage } from "../survival/stats";
 import type { Clock } from "../time/clock";
 import { isNight } from "../time/clock";
-import { makeStack, damageTool } from "../inventory/stack";
+import { makeStack } from "../inventory/stack";
 import type { ItemDef, ToolTier } from "../rules/items";
-import { armorReduction } from "../combat/armor";
-import { isInvulnerable } from "../combat/iframes";
-import { resistanceFraction } from "../effects/status";
 import { knockbackImpulse } from "../combat/knockback";
-import { ARMOR_SLOTS } from "../inventory/equipment";
+import { applyPlayerDamage } from "../combat/player-damage";
 
 import { MobManager } from "../mobs/manager";
 import { Mob, type Vec3 } from "../mobs/entity";
@@ -509,39 +505,15 @@ function raySlab(
   return tmin < 0 ? 0 : tmin;
 }
 
-/**
- * THE single player-damage chokepoint. Applies armor reduction, decrements
- * armor durability on a real hit, then routes the clamped integer amount to
- * the survival damage() function. (i-frames are added in Task 6.)
- *
- * Starvation does NOT pass through here (it writes s.health directly) — by
- * design, armor never mitigates starvation.
- */
-export function applyPlayerDamage(
-  player: Player,
-  rawAmount: number,
-  currentTick: number,
-): void {
-  const defense = player.equipment.totalDefense();
-  const armored = armorReduction(rawAmount, defense);
-  // Resistance stage (Phase 5): armor → resistance → clamp. Rounds to the
-  // integer half-heart economy. resistanceFraction is 0 when no Resistance
-  // effect is active, so this is a no-op for the pinned no-effect tests.
-  const fraction = resistanceFraction(player.effects);
-  const effective = fraction > 0 ? Math.max(0, Math.round(armored * (1 - fraction))) : armored;
-  if (effective <= 0) return; // fully absorbed — no health loss, no durability wear
-  // i-frames: ignore hits within the immunity window of the last real hit.
-  if (isInvulnerable(player.survival.lastDamageTick, currentTick)) return;
-  // Decrement durability on each worn piece that took the hit.
-  for (const slot of ARMOR_SLOTS) {
-    const piece = player.equipment.get(slot);
-    if (piece !== null) {
-      player.equipment.set(slot, damageTool(piece));
-    }
-  }
-  damage(player.survival, effective);
-  player.survival.lastDamageTick = currentTick;
-}
+// The player-side combat chokepoint now lives in src/combat/player-damage.ts
+// (extracted in Phase 6a so controller.ts can route fall damage through it
+// without a circular import). Re-exported here so existing callers/tests that
+// import from "./mob-driver" are unaffected.
+export {
+  applyPlayerDamage,
+  applyPlayerKnockback,
+  type DamageSource,
+} from "../combat/player-damage";
 
 /**
  * Deal one player melee hit to `mob` at `currentTick`. Defaults to

@@ -1014,6 +1014,7 @@ engine.runRenderLoop(() => {
         camera.rotation.y,
         world,
         swiftnessMultiplier(player.effects),
+        clock.totalTicks,
       );
     advance(clock, 1);
     // Mobs advance on the same fixed tick. currentTick is the clock's monotonic

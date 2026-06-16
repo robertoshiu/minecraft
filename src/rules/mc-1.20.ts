@@ -401,6 +401,27 @@ export const ARROW = {
   SPAWN_OFFSET: 0.5,
 } as const;
 
+/** Max simultaneous in-flight splash potions (pooled/capped; separate from arrows). */
+export const SPLASH_POTION_CAP = 8 as const;
+
+/** Splash-potion ballistics + burst (blocks/tick at 20 TPS). */
+export const SPLASH = {
+  /** Throw speed (blocks/tick). Slower + heavier-arced than an arrow. */
+  SPEED: 1.2,
+  /** Per-tick gravity on vy. */
+  GRAVITY: 0.05,
+  /** Per-tick air drag multiplier. */
+  DRAG: 0.99,
+  /** Spawn offset past the eye so it clears the body. */
+  SPAWN_OFFSET: 0.5,
+  /** AoE radius (blocks) of the burst effect/damage. */
+  RADIUS: 4,
+  /** Instant-damage half-hearts dealt to mobs in range on burst (splash harm). */
+  MOB_DAMAGE: 4,
+  /** Ticks a splash potion may fly before auto-despawn. */
+  MAX_AGE: 200,
+} as const;
+
 export const LIGHT = {
   /** Max light level at which hostile mobs may spawn. */
   HOSTILE_MAX: 7,

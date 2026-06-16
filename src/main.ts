@@ -48,7 +48,9 @@ import { nextBurningTicks, fireDamageDue } from "./combat/fire";
 import { applyPlayerDamage } from "./combat/player-damage";
 import { makeClock, advance, tickOfDay, dayNumber } from "./time/clock";
 import { canSleep, sleepToDawn } from "./sleep/bed";
-import { skyColorAt } from "./time/sky";
+import { skyColorAt, sunLightIntensityAt } from "./time/sky";
+import { USE_PBR_TERRAIN } from "./rendering/terrain-material";
+import { createEnvironmentCubemap } from "./rendering/environment-cubemap";
 import { applySky } from "./game/daynight";
 import { addExhaustion, eat } from "./survival/stats";
 import { IndexedDbStore, type SaveStore } from "./save/store";
@@ -209,6 +211,12 @@ try {
 // --- World + renderer -----------------------------------------------------
 const world = new World(WORLD_SEED);
 const materials = createTerrainMaterials(scene);
+
+// Phase 6d (flag-gated, default OFF): when PBR terrain is on, build the
+// procedural IBL cubemap ONCE. Guarded + flag-scoped so the default path never
+// touches scene.environmentTexture and a GPU failure degrades to no-IBL.
+const envTexture = USE_PBR_TERRAIN ? createEnvironmentCubemap(scene) : null;
+
 // Pass the CSM sink (or null) so all opaque chunk meshes are registered as casters from build.
 const renderer = new WorldRenderer(scene, world, materials, shadowGenerator ?? undefined);
 renderer.buildInitial(WORLD_RADIUS_COLUMNS);
@@ -1251,8 +1259,19 @@ engine.runRenderLoop(() => {
     brewingStandScreen.render();
   }
 
-  // Drive the sky / sun / fog from the clock's time-of-day.
-  applySky({ scene, sun: sunLight, hemi: hemiLight }, clock);
+  // Drive the sky / sun / fog from the clock's time-of-day. When IBL is active
+  // (flag ON + cubemap built), also feed a day/night-scaled environment
+  // intensity so IBL dims at night and never blows out at noon.
+  if (envTexture !== null) {
+    const iblIntensity = sunLightIntensityAt(tickOfDay(clock)) * currentPrefs.pbrIntensity;
+    applySky(
+      { scene, sun: sunLight, hemi: hemiLight },
+      clock,
+      { texture: envTexture, intensity: iblIntensity },
+    );
+  } else {
+    applySky({ scene, sun: sunLight, hemi: hemiLight }, clock);
+  }
 
   // Reconcile mob boxes with the live mob set (mobs move; no frozen matrices).
   mobRenderer.sync(mobDriver.manager.all(), performance.now(), clock.totalTicks);

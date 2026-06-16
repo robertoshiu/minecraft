@@ -90,6 +90,8 @@ describe("tickHostile — zombie chase", () => {
     const isSolid = flatFloor(64);
     // Player adjacent (within zombie attackRange 1.6).
     const { hooks, hits } = makeHooks({ x: 1.5, y: 64, z: 0.5 });
+    let knockedBack = false;
+    hooks.knockbackPlayer = () => { knockedBack = true; };
     const zombie = new Mob(1, "zombie", { x: 0.5, y: 64, z: 0.5 });
     zombie.onGround = true;
 
@@ -102,6 +104,8 @@ describe("tickHostile — zombie chase", () => {
     for (const h of hits) expect(h).toBe(3);
     // Cooldown (~20 ticks) keeps hits well below one-per-tick.
     expect(hits.length).toBeLessThan(10);
+    // Phase 6a: each melee hit also triggers a knockback push.
+    expect(knockedBack).toBe(true);
   });
 
   it("does NOT chase when line-of-sight is blocked by an opaque wall", () => {

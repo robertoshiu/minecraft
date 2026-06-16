@@ -23,7 +23,7 @@ import { isNight } from "../time/clock";
 import { makeStack } from "../inventory/stack";
 import type { ItemDef, ToolTier } from "../rules/items";
 import { knockbackImpulse } from "../combat/knockback";
-import { applyPlayerDamage } from "../combat/player-damage";
+import { applyPlayerDamage, applyPlayerKnockback } from "../combat/player-damage";
 
 import { MobManager } from "../mobs/manager";
 import { Mob, type Vec3 } from "../mobs/entity";
@@ -98,6 +98,9 @@ const KILL_CREDIT_RANGE = 6;
 
 /** Creeper blast power (matches the explosion contract: creeper = 3). */
 const CREEPER_POWER = 3;
+
+/** Horizontal knockback strength of a creeper blast (vs the default melee shove). */
+const CREEPER_BLAST_KNOCKBACK = 0.8;
 
 /** Column extent (blocks); must match the World's column size. */
 const COLUMN_SIZE = 16;
@@ -280,6 +283,7 @@ export class MobDriver {
       damagePlayer: (amount: number) =>
         applyPlayerDamage(player, amount, clock.totalTicks),
       playerEyePos: () => player.eyePosition(),
+      knockbackPlayer: (attackerXZ) => applyPlayerKnockback(player, attackerXZ),
     };
 
     // Snapshot first: AI may spawn/despawn, and we mutate the manager below.
@@ -362,6 +366,11 @@ export class MobDriver {
       },
       currentTick,
     );
+
+    // Blast knockback: push the player away from the creeper's feet (blast
+    // center XZ). The Mob object stays alive in the local `mob` until removal
+    // below, so mob.feet is valid here. Strength 0.8 reflects the blast.
+    applyPlayerKnockback(player, { x: mob.feet.x, z: mob.feet.z }, CREEPER_BLAST_KNOCKBACK);
 
     // Re-mesh + invalidate skylight for every destroyed coordinate.
     for (const c of result.destroyed) {
@@ -509,11 +518,8 @@ function raySlab(
 // (extracted in Phase 6a so controller.ts can route fall damage through it
 // without a circular import). Re-exported here so existing callers/tests that
 // import from "./mob-driver" are unaffected.
-export {
-  applyPlayerDamage,
-  applyPlayerKnockback,
-  type DamageSource,
-} from "../combat/player-damage";
+export { applyPlayerDamage, applyPlayerKnockback };
+export type { DamageSource } from "../combat/player-damage";
 
 /**
  * Deal one player melee hit to `mob` at `currentTick`. Defaults to

@@ -46,6 +46,11 @@ export type BlockQuery = (bx: number, by: number, bz: number) => BlockId;
 export interface CombatHooks {
   damagePlayer: (amount: number) => void;
   playerEyePos: () => Vec3;
+  /**
+   * Optional: push the player away from `attackerXZ` (the mob's feet) on a
+   * melee hit. Optional so plain test fakes that only record damage compile.
+   */
+  knockbackPlayer?: (attackerXZ: { x: number; z: number }) => void;
 }
 
 // --- Tunables (ticks) -------------------------------------------------------
@@ -252,6 +257,7 @@ export function tickHostile(
   if (attackReady(mob, bodyDist, attackRange, cooldown, currentTick)) {
     mob.aiState = "attack";
     hooks.damagePlayer(attackDamage);
+    hooks.knockbackPlayer?.({ x: mob.feet.x, z: mob.feet.z });
     mob.extra[LAST_ATTACK_KEY] = currentTick;
   }
 

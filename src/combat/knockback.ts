@@ -1,11 +1,10 @@
 /**
  * knockback.ts — PURE knockback-impulse vector math.
  *
- * Given the attacker's XZ position and the mob's feet, returns a velocity
+ * Given the attacker's XZ position and the target's feet, returns a velocity
  * impulse (blocks/tick) pointing away from the attacker on the XZ plane plus a
- * small fixed upward component. Player knockback is DEFERRED (the player body
- * recomputes horizontal velocity from input each tick — no impulse channel),
- * so this is used only for MOBS.
+ * small fixed upward component. Used for BOTH mob knockback (attackMob) and
+ * player knockback (applyPlayerKnockback, added in Phase 6a).
  */
 
 import type { Vec3 } from "../mobs/entity";

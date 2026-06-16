@@ -284,6 +284,8 @@ describe("MobDriver.aiTick — creeper explosion path", () => {
     expect(driver.manager.get(creeper.id)).toBeUndefined();
     // …and the renderer was told about destroyed blocks.
     expect(renderer.changed.length).toBeGreaterThan(0);
+    // Phase 6a: the blast also knocks the player back.
+    expect(player.knockbackX !== 0 || player.knockbackZ !== 0).toBe(true);
   });
 });
 

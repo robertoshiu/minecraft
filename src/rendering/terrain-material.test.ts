@@ -7,12 +7,12 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { Scene } from "@babylonjs/core/scene";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
-import type { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import type { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 // Required to augment Material with .pluginManager (side-effect import).
 import "@babylonjs/core/Materials/materialPluginManager";
 
-import { createTerrainMaterials } from "./terrain-material";
+import { createTerrainMaterials, USE_PBR_TERRAIN, PBR_TERRAIN_ROUGHNESS } from "./terrain-material";
 
 let engine: NullEngine;
 let scene: Scene;
@@ -188,5 +188,23 @@ describe("createTerrainMaterials (atlas path)", () => {
         expect(noMipmap).toBe(true);
       }
     }
+  });
+});
+
+describe("USE_PBR_TERRAIN flag (Phase 6d)", () => {
+  it("defaults to false (shipped path is StandardMaterial, no PBR)", () => {
+    expect(USE_PBR_TERRAIN).toBe(false);
+  });
+
+  it("PBR_TERRAIN_ROUGHNESS is a sensible matte value in (0,1]", () => {
+    expect(PBR_TERRAIN_ROUGHNESS).toBeGreaterThan(0);
+    expect(PBR_TERRAIN_ROUGHNESS).toBeLessThanOrEqual(1);
+  });
+
+  it("with the flag OFF, createTerrainMaterials returns StandardMaterials", () => {
+    // The default flag is OFF, so the existing StandardMaterial body runs.
+    const mats = createTerrainMaterials(scene);
+    expect(mats.opaque).toBeInstanceOf(StandardMaterial);
+    expect(mats.transparent).toBeInstanceOf(StandardMaterial);
   });
 });

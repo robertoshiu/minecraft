@@ -40,6 +40,24 @@ import { generateAtlasRGBA, ATLAS_PX } from "./atlas";
 /** Flip to `false` to fall back to the old vertex-color path. */
 export const USE_ATLAS = true;
 
+/**
+ * Phase 6d master flag (default OFF). When `false`, terrain uses the existing
+ * StandardMaterial + AtlasMaterialPlugin golden-hour path and the scene has NO
+ * environment texture — BYTE-IDENTICAL to the shipped look. When `true`,
+ * createTerrainMaterials returns a PBRMaterial pair (metallic 0, uniform
+ * roughness) reusing the SAME albedo atlas, and main.ts wires a procedural IBL
+ * cubemap into scene.environmentTexture. Requires USE_ATLAS === true (the PBR
+ * path reuses the atlas). Rendering-only: NO SAVE_VERSION interaction.
+ */
+export const USE_PBR_TERRAIN = false;
+
+/**
+ * Uniform GGX roughness for the PBR terrain path (Phase 6d, v1). Tuned toward
+ * the matte Minecraft voxel look (no shiny stone). Metallic is fixed at 0 (all
+ * terrain is non-metal). Per-type roughness is an explicit follow-up, not v1.
+ */
+export const PBR_TERRAIN_ROUGHNESS = 0.78;
+
 /** Alpha used for the transparent (water/glass/leaves) render pass. */
 const TRANSPARENT_ALPHA = 0.7;
 

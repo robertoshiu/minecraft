@@ -43,7 +43,9 @@ import { updateArmorHud } from "./ui/armor-hud";
 import { isTool, damageTool } from "./inventory/stack";
 import { Inventory } from "./inventory/inventory";
 import { makeDefaultInventory } from "./inventory/default-inventory";
-import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME, ARROW } from "./rules/mc-1.20";
+import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME, ARROW, FIRE } from "./rules/mc-1.20";
+import { nextBurningTicks, fireDamageDue } from "./combat/fire";
+import { applyPlayerDamage } from "./combat/player-damage";
 import { makeClock, advance, tickOfDay, dayNumber } from "./time/clock";
 import { canSleep, sleepToDawn } from "./sleep/bed";
 import { skyColorAt } from "./time/sky";
@@ -932,7 +934,7 @@ let lastTime = performance.now();
 
 /** Respawn the player at the world spawn, hide the death screen, and resume. */
 function respawnPlayer(): void {
-  player.respawn(spawnPoint);
+  player.respawn(spawnPoint); // also zeros burningTicks (and knockback) via Player.respawn()
   deathState.hide();
   hideDeath();
   // Drop any accumulated frame time so play resumes cleanly (no tick storm).
@@ -1029,6 +1031,30 @@ engine.runRenderLoop(() => {
     // independent of tickSurvival (already called inside player.update). Runs
     // before the death check so instant_damage etc. can be lethal this tick.
     tickEffects(player.effects, player.survival, currentTick);
+
+    // Fire / lava damage-over-time. Lava is non-solid, so sample BOTH the
+    // feet cell (swimming IN lava) AND the cell below (standing ON the lava
+    // surface). Note: footsteps only sample the cell below; here we check both
+    // because the player can be submerged. Route through the "fire" damage
+    // source so fire_resistance fully negates it and i-frames apply.
+    // player.burningTicks is a Player instance field (same lifecycle as
+    // knockbackX/knockbackZ) — zeroed on respawn, not persisted.
+    {
+      const fx = Math.floor(player.feet.x);
+      const fy = Math.floor(player.feet.y);
+      const fz = Math.floor(player.feet.z);
+      const inLava =
+        world.getBlock(fx, fy, fz) === Blocks.LAVA ||
+        world.getBlock(fx, fy - 1, fz) === Blocks.LAVA;
+      player.burningTicks = nextBurningTicks(
+        player.burningTicks,
+        inLava,
+        FIRE.IGNITE_TICKS,
+      );
+      if (fireDamageDue(player.burningTicks, FIRE.DAMAGE_INTERVAL)) {
+        applyPlayerDamage(player, FIRE.DAMAGE, currentTick, "fire");
+      }
+    }
 
     // Step in-flight arrows: sweep vs blocks + mobs, apply damage, recycle.
     const liveMobs = mobDriver.manager.all();

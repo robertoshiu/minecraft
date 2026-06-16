@@ -84,6 +84,13 @@ export class Player {
    */
   knockbackX = 0;
   knockbackZ = 0;
+  /**
+   * Remaining ticks of fire-burn from lava/fire contact. Counts down each tick
+   * via nextBurningTicks(); damage is dealt on a fixed interval via
+   * fireDamageDue(). Transient — not persisted; same lifecycle as the knockback
+   * channel above (zeroed on respawn, re-derived from world contact).
+   */
+  burningTicks = 0;
   private readonly spawn: Vec3;
 
   constructor(spawn: Vec3) {
@@ -247,6 +254,7 @@ export class Player {
     this.effects.list.length = 0;
     this.knockbackX = 0;
     this.knockbackZ = 0;
+    this.burningTicks = 0;
   }
 }
 

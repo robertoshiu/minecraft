@@ -98,8 +98,8 @@ import { tickEffects, swiftnessMultiplier, strengthBonus, applyEffect, applyInst
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
-/** radius 3 → 7×7 = 49 columns; boots in a few seconds. */
-const WORLD_RADIUS_COLUMNS = 3;
+/** radius 5 → 11×11 = 121 columns; boots in a few seconds. */
+const WORLD_RADIUS_COLUMNS = 5;
 /** Reach distance for mining / placing (blocks). */
 const REACH = 6;
 /** Fixed physics tick length (seconds) — one Minecraft tick at 20 TPS. */

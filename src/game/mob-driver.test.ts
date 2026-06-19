@@ -69,8 +69,21 @@ function worldWithFloor(
   world.ensureColumn(Math.floor(bx / 16), Math.floor(bz / 16));
   world.setBlock(bx, floorY, bz, floorBlock);
   if (roof) {
+    // Clear headroom cells so the floor has the required 2-air gap,
+    // then fill the roof from floorY+6 upward. The surface scan (first solid
+    // with 2 air above, top-down) will skip the continuous stone roof and
+    // land on floorY.
+    for (let y = floorY + 1; y <= floorY + 5; y++) {
+      world.setBlock(bx, y, bz, Blocks.AIR);
+    }
     for (let y = floorY + 6; y <= 210; y++) {
       world.setBlock(bx, y, bz, Blocks.STONE);
+    }
+  } else {
+    // No roof: clear all blocks above floorY so the surface scan finds
+    // floorY first regardless of any naturally-generated terrain above.
+    for (let y = floorY + 1; y <= 210; y++) {
+      world.setBlock(bx, y, bz, Blocks.AIR);
     }
   }
   return world;
@@ -81,9 +94,9 @@ function freshPlayer(): Player {
 }
 
 describe("MobDriver.spawnTick — day/night + cap gating", () => {
-  // rng=0,0 → randomSpawnOffset = (dx=24, dz=0); player at x=0.5 → wx=24, wz=0.
+  // rng=0,0 → randomSpawnOffset = (dx=SPAWN_RADIUS.min=16, dz=0); player at x=0.5 → wx=16, wz=0.
   // A trailing draw selects the mob type from the category list.
-  const SPAWN_AT = { x: 24, z: 0 };
+  const SPAWN_AT = { x: 16, z: 0 };
 
   it("spawns a PASSIVE mob by day on a grass surface", () => {
     const floorY = 64;

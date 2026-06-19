@@ -127,6 +127,8 @@ export class WorldRenderer implements RemeshNotifier {
   private shadowSink: ShadowCasterSink | null = null;
   /** Re-entrancy guard: true while onColumnLoaded is executing. */
   private handlingColumnLoad = false;
+  /** Render radius set by buildInitial/rebuild; used to gate far-column loads. */
+  private renderRadius = 0;
 
   constructor(scene: Scene, world: World, materials: TerrainMaterials, shadowSink?: ShadowCasterSink) {
     this.scene = scene;
@@ -149,6 +151,7 @@ export class WorldRenderer implements RemeshNotifier {
    * columns are ensured first so neighbor borders are available for culling.
    */
   buildInitial(radiusColumns: number): void {
+    this.renderRadius = radiusColumns;
     for (let cx = -radiusColumns; cx <= radiusColumns; cx++) {
       for (let cz = -radiusColumns; cz <= radiusColumns; cz++) {
         this.world.ensureColumn(cx, cz);
@@ -249,6 +252,9 @@ export class WorldRenderer implements RemeshNotifier {
    */
   onColumnLoaded(cx: number, cz: number): void {
     if (this.handlingColumnLoad) return;
+    // Reject columns that are outside the fixed render grid (e.g. mob-spawn
+    // far probes) so they do not produce meshes and inflate getMeshCount().
+    if (Math.abs(cx) > this.renderRadius || Math.abs(cz) > this.renderRadius) return;
     this.handlingColumnLoad = true;
     try {
       // (1) Ensure all 4 horizontal neighbors exist so cross-chunk culling reads
@@ -343,6 +349,7 @@ export class WorldRenderer implements RemeshNotifier {
    * than the original {@link buildInitial} call.
    */
   rebuild(radiusColumns: number): void {
+    this.renderRadius = radiusColumns;
     // Dispose all existing sections — remove shadow casters BEFORE dispose.
     for (const { opaque, transparent } of this.sections.values()) {
       if (opaque !== null) {

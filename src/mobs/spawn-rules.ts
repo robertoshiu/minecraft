@@ -22,7 +22,7 @@ import { Blocks, MOB_CAP, LIGHT } from "../rules/mc-1.20";
 const COMBAT_GRACE_TICKS = 40;
 
 /** Distance (blocks) beyond which a mob is a despawn candidate. */
-const DESPAWN_DISTANCE = 32;
+export const DESPAWN_DISTANCE = 64;
 
 /** Ticks a mob must remain far from the player before it despawns (30s @ 20 TPS). */
 const DESPAWN_FAR_TICKS = 600;
@@ -81,7 +81,7 @@ export function shouldDespawn(
 }
 
 /** Inclusive radius band (blocks) around the player in which mobs may spawn. */
-export const SPAWN_RADIUS = { min: 24, max: 128 } as const;
+export const SPAWN_RADIUS = { min: 16, max: 48 } as const;
 
 /**
  * A horizontal offset from the player landing in the `[SPAWN_RADIUS.min,

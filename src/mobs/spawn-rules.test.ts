@@ -6,6 +6,7 @@ import {
   randomSpawnOffset,
   canSpawnMore,
   SPAWN_RADIUS,
+  DESPAWN_DISTANCE,
 } from "./spawn-rules";
 import { Mob } from "./entity";
 import { Blocks, MOB_CAP, LIGHT } from "../rules/mc-1.20";
@@ -73,11 +74,13 @@ describe("shouldDespawn (U4 combat grace)", () => {
   it("despawns when far, timed out, and not recently damaged", () => {
     const mob = makeMob(100);
     // currentTick - lastDamageTick = 40 (not < 40) -> grace over
-    expect(shouldDespawn(mob, 33, 600, 140)).toBe(true);
+    // distance 65 > DESPAWN_DISTANCE (64) -> despawn candidate
+    expect(shouldDespawn(mob, 65, 600, 140)).toBe(true);
   });
 
   it("does not despawn within despawn distance", () => {
     const mob = makeMob(0);
+    // distance 32 < DESPAWN_DISTANCE (64) -> not a candidate
     expect(shouldDespawn(mob, 32, 100_000, 100_000)).toBe(false);
   });
 
@@ -86,9 +89,9 @@ describe("shouldDespawn (U4 combat grace)", () => {
     expect(shouldDespawn(mob, 1000, 599, 100_000)).toBe(false);
   });
 
-  it("despawns exactly at distance>32 and ticksFar>=600", () => {
+  it("despawns exactly at distance>DESPAWN_DISTANCE and ticksFar>=600", () => {
     const mob = makeMob(0);
-    expect(shouldDespawn(mob, 32.0001, 600, 100_000)).toBe(true);
+    expect(shouldDespawn(mob, DESPAWN_DISTANCE + 0.0001, 600, 100_000)).toBe(true);
   });
 });
 

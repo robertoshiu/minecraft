@@ -89,7 +89,7 @@ const SPAWN_INTERVAL_TICKS = 20;
  * Distance (blocks) beyond which a mob accrues "far from player" ticks; matches
  * the despawn-rules threshold so the two agree.
  */
-const FAR_DISTANCE = 32;
+const FAR_DISTANCE = 64;
 
 /** How far below the spawn candidate we scan for the first solid surface. */
 const SURFACE_SCAN_TOP = 200;

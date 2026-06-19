@@ -83,7 +83,7 @@ export function attackDamageFor(heldDef: ItemDef | null): number {
 }
 
 /** Attempt a spawn roughly every this many ticks. */
-const SPAWN_INTERVAL_TICKS = 40;
+const SPAWN_INTERVAL_TICKS = 20;
 
 /**
  * Distance (blocks) beyond which a mob accrues "far from player" ticks; matches

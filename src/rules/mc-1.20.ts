@@ -342,8 +342,8 @@ export const FUEL_VALUES: Record<string, number> = {
 // ---------------------------------------------------------------------------
 
 export const MOB_CAP = {
-  HOSTILE: 10,
-  PASSIVE: 10,
+  HOSTILE: 25,
+  PASSIVE: 20,
 } as const;
 
 /**

@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 
 import { World } from "../world/world";
 import { Player } from "../player/controller";
-import { makeClock, type Clock } from "../time/clock";
-import { TIME, Blocks, type BlockId, BABY_SCALE } from "../rules/mc-1.20";
+import { makeClock, advance, type Clock } from "../time/clock";
+import { TIME, Blocks, type BlockId, BABY_SCALE, MOB_CAP } from "../rules/mc-1.20";
 import type { RemeshNotifier } from "../rendering/world-renderer";
 import { Mob } from "../mobs/entity";
 import { MOB_STATS, type MobType } from "../rules/mob-stats";
@@ -155,15 +155,34 @@ describe("MobDriver.spawnTick — day/night + cap gating", () => {
     const world = worldWithFloor(SPAWN_AT.x, 64, SPAWN_AT.z, Blocks.GRASS);
     const driver = new MobDriver(world, new RecordingRenderer());
     // Fill the passive population to the cap directly via the manager.
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < MOB_CAP.PASSIVE; i++) {
       driver.manager.spawn("cow", { x: 0, y: 64, z: 0 });
     }
-    expect(driver.manager.countPassive()).toBe(10);
+    expect(driver.manager.countPassive()).toBe(MOB_CAP.PASSIVE);
 
     driver.spawnTick(freshPlayer().feet, dayClock(), seqRng([0, 0, 0]));
 
     // Still capped — the spawn attempt was rejected by canSpawnMore.
-    expect(driver.manager.countPassive()).toBe(10);
+    expect(driver.manager.countPassive()).toBe(MOB_CAP.PASSIVE);
+  });
+
+  it("spawn cadence: ~3 attempts in 60 ticks (interval = 20 ticks)", () => {
+    // World that always produces a valid passive spawn site.
+    const world = worldWithFloor(SPAWN_AT.x, 64, SPAWN_AT.z, Blocks.GRASS);
+    const driver = new MobDriver(world, new RecordingRenderer());
+    const clock = makeClock(0);
+    const player = freshPlayer();
+    let attempts = 0;
+    // Advance tick-by-tick; count how many times a mob is actually spawned
+    // (each successful spawnTick call that passes the interval gate adds one).
+    for (let t = 0; t < 60; t++) {
+      const before = driver.manager.countPassive();
+      driver.spawnTick(player.feet, clock, seqRng([0, 0, 0]));
+      if (driver.manager.countPassive() > before) attempts++;
+      advance(clock, 1);
+    }
+    // With SPAWN_INTERVAL_TICKS=20, ticks 0, 20, 40 each trigger a spawn → 3.
+    expect(attempts).toBe(3);
   });
 });
 

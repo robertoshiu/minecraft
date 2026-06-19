@@ -109,6 +109,21 @@ describe("canSpawnMore (mob cap)", () => {
   it("blocks passive spawns at the passive cap", () => {
     expect(canSpawnMore("passive", MOB_CAP.PASSIVE)).toBe(false);
   });
+
+  it("locks exact cap values: HOSTILE === 25, PASSIVE === 20", () => {
+    expect(MOB_CAP.HOSTILE).toBe(25);
+    expect(MOB_CAP.PASSIVE).toBe(20);
+  });
+
+  it("exact boundary: canSpawnMore hostile 24 true, 25 false", () => {
+    expect(canSpawnMore("hostile", 24)).toBe(true);
+    expect(canSpawnMore("hostile", 25)).toBe(false);
+  });
+
+  it("exact boundary: canSpawnMore passive 19 true, 20 false", () => {
+    expect(canSpawnMore("passive", 19)).toBe(true);
+    expect(canSpawnMore("passive", 20)).toBe(false);
+  });
 });
 
 describe("randomSpawnOffset", () => {

@@ -457,14 +457,17 @@ export class InventoryScreen {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist <= InventoryScreen.DRAG_TOLERANCE_PX) {
-          // Stationary enough to be a click: restore item to slot, then apply click.
-          this.inventory.set(index, this.dragState.item);
+          // Stationary enough to be a click: pick the lifted stack up to the
+          // cursor directly. The slot was already cleared on mousedown, so
+          // applySlotClick moves the lifted stack onto the (empty) cursor with
+          // no restore round-trip. Shift is intentionally not handled here: a
+          // drag only begins on a non-shift mousedown, so a shift-held release
+          // on the source slot is unreachable and falls through as a plain pickup.
+          const lifted = this.dragState.item;
           this.dragState = null;
           this.dragStart = null;
           this.dragIconStyle = null;
-          // Fall through to normal click path.
-          const slot = this.inventory.get(index);
-          const r = applySlotClick(this.cursor, slot);
+          const r = applySlotClick(this.cursor, lifted);
           this.cursor = r.cursor;
           this.inventory.set(index, r.slot);
           // Announce pickup to screen reader.

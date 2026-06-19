@@ -18,6 +18,7 @@
 import type { Scene } from "@babylonjs/core/scene";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
+import { Animation } from "@babylonjs/core/Animations/animation";
 
 import type { Chunk, FaceDir } from "../chunk/data";
 import { meshChunk } from "../meshing/greedy";
@@ -39,6 +40,8 @@ export interface ShadowCasterSink {
 const SECTION_COUNT = 16;
 /** Edge length of a section / column in blocks. */
 const SECTION_SIZE = 16;
+/** Duration of the column fade-in animation in milliseconds. */
+const COLUMN_FADE_MS = 300;
 
 /** The pair of meshes a single section may own (either may be null). */
 interface SectionMeshes {
@@ -122,6 +125,8 @@ export class WorldRenderer implements RemeshNotifier {
   private readonly sections = new Map<string, SectionMeshes>();
   /** Optional shadow caster sink — set before buildInitial for CSM support. */
   private shadowSink: ShadowCasterSink | null = null;
+  /** Re-entrancy guard: true while onColumnLoaded is executing. */
+  private handlingColumnLoad = false;
 
   constructor(scene: Scene, world: World, materials: TerrainMaterials, shadowSink?: ShadowCasterSink) {
     this.scene = scene;
@@ -229,6 +234,81 @@ export class WorldRenderer implements RemeshNotifier {
     }
 
     this.sections.set(key, { opaque, transparent });
+  }
+
+  /**
+   * Called when a column at (cx, cz) has been freshly generated mid-game.
+   * Ensures all 4 horizontal neighbors exist (so cross-column culling can read
+   * real voxels), remeshes the new column and its 4 neighbors, and applies a
+   * 300ms visibility fade-in to the newly created column meshes only.
+   *
+   * Re-entrancy guard: if a recursive call arrives (e.g. ensureColumn for a
+   * neighbor triggers another fresh-column event), the inner call is a no-op —
+   * the outer call already enqueues neighbor remeshes, so coverage is correct
+   * and bounded.
+   */
+  onColumnLoaded(cx: number, cz: number): void {
+    if (this.handlingColumnLoad) return;
+    this.handlingColumnLoad = true;
+    try {
+      // (1) Ensure all 4 horizontal neighbors exist so cross-chunk culling reads
+      // real voxels rather than treating the neighbor as AIR.
+      const neighbors: [number, number][] = [
+        [cx + 1, cz],
+        [cx - 1, cz],
+        [cx, cz + 1],
+        [cx, cz - 1],
+      ];
+      for (const [ncx, ncz] of neighbors) {
+        this.world.ensureColumn(ncx, ncz);
+      }
+
+      // (2) Remesh the new column and collect non-null meshes for fade-in.
+      const newMeshes: Mesh[] = [];
+      for (let sy = 0; sy < SECTION_COUNT; sy++) {
+        this.remeshSection(cx, sy, cz);
+        const key = sectionKey(cx, sy, cz);
+        const sm = this.sections.get(key);
+        if (sm !== undefined) {
+          if (sm.opaque !== null) newMeshes.push(sm.opaque);
+          if (sm.transparent !== null) newMeshes.push(sm.transparent);
+        }
+      }
+
+      // (3) Remesh each of the 4 neighbors (no fade on neighbors).
+      for (const [ncx, ncz] of neighbors) {
+        for (let sy = 0; sy < SECTION_COUNT; sy++) {
+          this.remeshSection(ncx, sy, ncz);
+        }
+      }
+
+      // (4) Apply the 300ms visibility fade-in to the new column meshes only.
+      // Materials are shared, so we use mesh.visibility (per-mesh, independent
+      // of material.alpha). Under NullEngine there is no render loop so
+      // CreateAndStartAnimation is a no-op / no-throw — visibility may stay 0.
+      for (const mesh of newMeshes) {
+        mesh.visibility = 0;
+        try {
+          const frameRate = 60;
+          const totalFrames = Math.ceil((COLUMN_FADE_MS / 1000) * frameRate);
+          Animation.CreateAndStartAnimation(
+            `${mesh.name}_fade`,
+            mesh,
+            "visibility",
+            frameRate,
+            totalFrames,
+            0,
+            1,
+            Animation.ANIMATIONLOOPMODE_CONSTANT,
+          );
+        } catch {
+          // Headless / NullEngine: no render loop — leave visibility at 0.
+          // Tests assert geometry/culling, not visibility, so this is safe.
+        }
+      }
+    } finally {
+      this.handlingColumnLoad = false;
+    }
   }
 
   /**

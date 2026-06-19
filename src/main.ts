@@ -221,6 +221,11 @@ const envTexture = USE_PBR_TERRAIN ? createEnvironmentCubemap(scene) : null;
 const renderer = new WorldRenderer(scene, world, materials, shadowGenerator ?? undefined);
 renderer.buildInitial(WORLD_RADIUS_COLUMNS);
 
+// Subscribe AFTER the initial build so the boot path does not fire the listener.
+// Belt-and-suspenders: suppressColumnLoaded on setBlock paths is the inner guard;
+// this post-build subscription is the outer guard.
+world.subscribeColumnLoaded((cx, cz) => renderer.onColumnLoaded(cx, cz));
+
 // --- Mobs: driver (spawn + AI + combat) and a separate flat-box renderer ---
 // The driver owns the MobManager; the renderer only consumes manager.all().
 const mobDriver = new MobDriver(world, renderer);

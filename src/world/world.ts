@@ -50,9 +50,31 @@ export class World {
   /** Live column store, keyed by {@link World.columnKey}. */
   readonly columns: Map<string, ChunkColumn>;
 
+  /** Registered column-loaded listeners. */
+  private readonly _columnLoadedListeners = new Set<(cx: number, cz: number) => void>();
+
+  /**
+   * When true, ensureColumn will NOT fire column-loaded listeners even for
+   * freshly generated columns. Used to suppress duplicate remesh when a
+   * setBlock call generates a column that the blockChanged path already handles.
+   */
+  suppressColumnLoaded = false;
+
   constructor(seed: number, columns?: Map<string, ChunkColumn>) {
     this.seed = seed;
     this.columns = columns ?? new Map<string, ChunkColumn>();
+  }
+
+  /**
+   * Register a listener that fires whenever a column is freshly generated
+   * (i.e. was absent before ensureColumn was called). Returns an unsubscribe
+   * function that removes the listener.
+   */
+  subscribeColumnLoaded(fn: (cx: number, cz: number) => void): () => void {
+    this._columnLoadedListeners.add(fn);
+    return () => {
+      this._columnLoadedListeners.delete(fn);
+    };
   }
 
   /** Map key for a column at (cx, cz). MUST match the renderer's format. */
@@ -68,13 +90,26 @@ export class World {
   /**
    * Return the column at (cx, cz), generating + caching it via
    * {@link generateColumn} if it does not exist yet.
+   *
+   * Fires all registered column-loaded listeners when the column is freshly
+   * generated (was absent before this call), unless {@link suppressColumnLoaded}
+   * is true. Cache hits (column already existed) do NOT fire listeners.
    */
   ensureColumn(cx: number, cz: number): ChunkColumn {
     const key = World.columnKey(cx, cz);
-    let column = this.columns.get(key);
-    if (column === undefined) {
+    const existing = this.columns.get(key);
+    const wasFresh = existing === undefined;
+    let column: ChunkColumn;
+    if (wasFresh) {
       column = generateColumn(cx, cz, this.seed);
       this.columns.set(key, column);
+    } else {
+      column = existing;
+    }
+    if (wasFresh && !this.suppressColumnLoaded && this._columnLoadedListeners.size > 0) {
+      for (const fn of this._columnLoadedListeners) {
+        fn(cx, cz);
+      }
     }
     return column;
   }
@@ -93,10 +128,21 @@ export class World {
   /**
    * Write a block at absolute world coords, ensuring the owning column exists
    * first. Out-of-range Y is silently ignored (nothing to write to).
+   *
+   * The ensureColumn call is wrapped in suppressColumnLoaded so that a block
+   * write into an ungenerated column does NOT fire the column-loaded listener —
+   * the existing blockChanged path already handles remeshing in this case.
    */
   setBlock(wx: number, wy: number, wz: number, id: BlockId): void {
     if (!inHeight(wy)) return;
-    const column = this.ensureColumn(toColumn(wx), toColumn(wz));
+    const prevSuppress = this.suppressColumnLoaded;
+    this.suppressColumnLoaded = true;
+    let column: ChunkColumn;
+    try {
+      column = this.ensureColumn(toColumn(wx), toColumn(wz));
+    } finally {
+      this.suppressColumnLoaded = prevSuppress;
+    }
     column.setBlock(toLocal(wx), wy, toLocal(wz), id);
   }
 

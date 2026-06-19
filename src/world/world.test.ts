@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { World } from "./world";
 import { Blocks } from "../rules/mc-1.20";
 
@@ -63,5 +63,99 @@ describe("World — coordinate mapping & block access", () => {
     expect(world.isSolidAt(0, surfaceY, 0)).toBe(true);
     // ensureColumn is idempotent: same instance on a second call.
     expect(world.ensureColumn(0, 0)).toBe(column);
+  });
+});
+
+describe("World — subscribeColumnLoaded", () => {
+  it("fires exactly once on a fresh ensureColumn and NOT on a repeated ensureColumn", () => {
+    const world = new World(SEED);
+    const fn = vi.fn();
+    world.subscribeColumnLoaded(fn);
+
+    world.ensureColumn(5, 5);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith(5, 5);
+
+    // Second call to same column: cache hit, must NOT fire again.
+    world.ensureColumn(5, 5);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires with correct cx, cz arguments for multiple different columns", () => {
+    const world = new World(SEED);
+    const calls: [number, number][] = [];
+    world.subscribeColumnLoaded((cx, cz) => calls.push([cx, cz]));
+
+    world.ensureColumn(0, 0);
+    world.ensureColumn(1, 2);
+    world.ensureColumn(-3, 4);
+
+    expect(calls).toHaveLength(3);
+    expect(calls[0]).toEqual([0, 0]);
+    expect(calls[1]).toEqual([1, 2]);
+    expect(calls[2]).toEqual([-3, 4]);
+  });
+
+  it("fires all multiple subscribers when a column is freshly generated", () => {
+    const world = new World(SEED);
+    const fn1 = vi.fn();
+    const fn2 = vi.fn();
+    const fn3 = vi.fn();
+    world.subscribeColumnLoaded(fn1);
+    world.subscribeColumnLoaded(fn2);
+    world.subscribeColumnLoaded(fn3);
+
+    world.ensureColumn(0, 0);
+
+    expect(fn1).toHaveBeenCalledTimes(1);
+    expect(fn2).toHaveBeenCalledTimes(1);
+    expect(fn3).toHaveBeenCalledTimes(1);
+  });
+
+  it("unsubscribe stops further callbacks", () => {
+    const world = new World(SEED);
+    const fn = vi.fn();
+    const unsub = world.subscribeColumnLoaded(fn);
+
+    world.ensureColumn(0, 0);
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    unsub();
+
+    world.ensureColumn(1, 1); // fresh column, but listener removed
+    expect(fn).toHaveBeenCalledTimes(1); // still only 1
+  });
+
+  it("suppressColumnLoaded=true prevents dispatch", () => {
+    const world = new World(SEED);
+    const fn = vi.fn();
+    world.subscribeColumnLoaded(fn);
+    world.suppressColumnLoaded = true;
+
+    world.ensureColumn(0, 0); // fresh, but suppressed
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("setBlock into an ungenerated column does NOT fire the column-loaded listener", () => {
+    const world = new World(SEED);
+    const fn = vi.fn();
+    world.subscribeColumnLoaded(fn);
+
+    // Writing to a block in a column that has not been generated yet.
+    world.setBlock(0, 70, 0, Blocks.STONE);
+
+    // The setBlock path suppresses the listener — blockChanged handles remesh.
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("setBlock into an already-generated column does NOT fire the listener", () => {
+    const world = new World(SEED);
+    world.ensureColumn(0, 0); // pre-generate
+
+    const fn = vi.fn();
+    world.subscribeColumnLoaded(fn);
+
+    world.setBlock(0, 70, 0, Blocks.STONE); // existing column → no event
+    expect(fn).not.toHaveBeenCalled();
   });
 });

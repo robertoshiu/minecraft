@@ -43,6 +43,7 @@ import {
   type SurvivalState,
 } from "../survival/stats";
 import { applyPlayerDamage } from "../combat/player-damage";
+import type { MobType } from "../rules/mob-stats";
 
 /** Per-frame movement intent (set by the input layer; read by update). */
 export interface InputState {
@@ -91,6 +92,13 @@ export class Player {
    * channel above (zeroed on respawn, re-derived from world contact).
    */
   burningTicks = 0;
+  /**
+   * The mob type that most recently dealt damage to the player (melee or
+   * explosion). Set by mob-driver whenever a hostile lands a hit; cleared by
+   * applyPlayerDamage for environmental sources (fall/fire) and by respawn().
+   * Transient — never serialized or persisted.
+   */
+  lastDamageMobType: MobType | null = null;
   private readonly spawn: Vec3;
 
   constructor(spawn: Vec3) {
@@ -255,6 +263,7 @@ export class Player {
     this.knockbackX = 0;
     this.knockbackZ = 0;
     this.burningTicks = 0;
+    this.lastDamageMobType = null;
   }
 }
 

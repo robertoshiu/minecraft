@@ -280,9 +280,16 @@ export class MobDriver {
     };
     const eye = player.eyePosition();
 
+    // Tracks which hostile is currently being ticked so the damagePlayer closure
+    // can attribute hits to the correct mob type.
+    let currentAttacker: Mob | null = null;
     const hooks: CombatHooks = {
-      damagePlayer: (amount: number) =>
-        applyPlayerDamage(player, amount, clock.totalTicks),
+      damagePlayer: (amount: number) => {
+        if (currentAttacker !== null) {
+          player.lastDamageMobType = currentAttacker.type;
+        }
+        applyPlayerDamage(player, amount, clock.totalTicks);
+      },
       playerEyePos: () => player.eyePosition(),
       knockbackPlayer: (attackerXZ) => applyPlayerKnockback(player, attackerXZ),
     };
@@ -304,6 +311,8 @@ export class MobDriver {
         // Track creeper fuse state before the tick to detect the rising edge.
         const wasFusing = mob.type === "creeper" && mob.aiState === "fuse";
         const prevHealth = mob.health;
+        // Attribute any damage in this tick to this mob.
+        currentAttacker = mob;
         const result = tickHostile(
           mob,
           this.isSolid,
@@ -359,14 +368,17 @@ export class MobDriver {
       y: mob.feet.y + stats.height / 2,
       z: mob.feet.z,
     };
+    // Attribute any explosion damage to this creeper before the blast.
     const result = explode(
       this.world,
       center,
       CREEPER_POWER,
       this.manager.all(),
       {
-        damagePlayer: (n: number) =>
-          applyPlayerDamage(player, n, currentTick),
+        damagePlayer: (n: number) => {
+          player.lastDamageMobType = mob.type;
+          applyPlayerDamage(player, n, currentTick);
+        },
         playerPos: () => player.feet,
       },
       currentTick,

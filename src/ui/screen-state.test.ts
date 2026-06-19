@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DeathScreenState, showDeath, hideDeath } from "./death-screen";
+import { DeathScreenState, showDeath, hideDeath, formatDeathCause } from "./death-screen";
 import { PauseMenu } from "./pause-menu";
 
 describe("DeathScreenState", () => {
@@ -68,5 +68,23 @@ describe("InventoryScreen (headless)", () => {
     expect(screen.isOpen()).toBe(true);
     screen.close();
     expect(screen.isOpen()).toBe(false);
+  });
+});
+
+describe("formatDeathCause", () => {
+  it("returns the generic string when no mob type is set (null)", () => {
+    expect(formatDeathCause(null)).toBe("You ran out of health");
+  });
+
+  it("returns 'Killed by Zombie' for mob type 'zombie'", () => {
+    expect(formatDeathCause("zombie")).toBe("Killed by Zombie");
+  });
+
+  it("returns 'Killed by Skeleton' for mob type 'skeleton'", () => {
+    expect(formatDeathCause("skeleton")).toBe("Killed by Skeleton");
+  });
+
+  it("returns 'Killed by Creeper' for mob type 'creeper'", () => {
+    expect(formatDeathCause("creeper")).toBe("Killed by Creeper");
   });
 });

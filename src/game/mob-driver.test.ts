@@ -395,6 +395,41 @@ describe("applyPlayerDamage resistance (Phase 5)", () => {
   });
 });
 
+describe("applyPlayerDamage — lastDamageMobType attribution clearing", () => {
+  it("source=fall clears lastDamageMobType", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.lastDamageMobType = "zombie";
+    player.survival.health = 20;
+    applyPlayerDamage(player, 4, 100, "fall");
+    expect(player.lastDamageMobType).toBeNull();
+  });
+
+  it("source=fire clears lastDamageMobType", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.lastDamageMobType = "skeleton";
+    player.survival.health = 20;
+    applyPlayerDamage(player, 1, 100, "fire");
+    expect(player.lastDamageMobType).toBeNull();
+  });
+
+  it("source=melee does NOT clear lastDamageMobType", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.lastDamageMobType = "creeper";
+    player.survival.health = 20;
+    applyPlayerDamage(player, 4, 100, "melee");
+    // melee does not touch lastDamageMobType — it remains set.
+    expect(player.lastDamageMobType).toBe("creeper");
+  });
+
+  it("source=explosion does NOT clear lastDamageMobType", () => {
+    const player = new Player({ x: 0, y: 0, z: 0 });
+    player.lastDamageMobType = "creeper";
+    player.survival.health = 20;
+    applyPlayerDamage(player, 4, 100, "explosion");
+    expect(player.lastDamageMobType).toBe("creeper");
+  });
+});
+
 describe("aiTick — mob status effects (Phase 6c)", () => {
   it("ticks an active poison on a live mob (health drops, never below 1)", () => {
     // Build the minimal World + MobDriver harness, mirroring the aiTick tests above.
@@ -441,5 +476,110 @@ describe("pickMob — baby hitbox (Phase 6c)", () => {
     baby.extra["babyScale"] = BABY_SCALE;
     const hitBaby = pickMob(origin, dir, 50, [baby]);
     expect(hitBaby).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Death attribution — lastDamageMobType via aiTick
+// ---------------------------------------------------------------------------
+
+describe("aiTick — lastDamageMobType attribution (mob melee)", () => {
+  /**
+   * Build a world with solid stone around the combat cell (mirrors the creeper
+   * explosion test). An air shaft at the column centre gives clear line-of-sight.
+   * The zombie is placed at cy+1 and the player at cy, so bodyDist (mob.feet →
+   * player eye) = distance({cy+1}, {cy+1.62}) = 0.62 < 1.6 (melee range).
+   */
+  function buildZombieInRange(): {
+    driver: MobDriver;
+    player: Player;
+    zombie: Mob;
+  } {
+    const world = new World(2);
+    const cx = 4;
+    const cy = 64;
+    const cz = 4;
+    // Solid stone pocket so the column is seeded with deterministic blocks.
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dz = -3; dz <= 3; dz++) {
+          world.setBlock(cx + dx, cy + dy, cz + dz, Blocks.STONE);
+        }
+      }
+    }
+    // Carve air shaft so line-of-sight is unobstructed and neither mob nor
+    // player is inside solid terrain.
+    for (let dy = -1; dy <= 4; dy++) {
+      world.setBlock(cx, cy + dy, cz, Blocks.AIR);
+    }
+
+    const driver = new MobDriver(world, new RecordingRenderer());
+    // Player stands at cy (feet), eye at cy+1.62.
+    const player = new Player({ x: cx + 0.5, y: cy, z: cz + 0.5 });
+    // Zombie feet at cy+1 → bodyDist to player eye (cy+1.62) = 0.62 < 1.6.
+    const zombie = driver.manager.spawn("zombie", {
+      x: cx + 0.5,
+      y: cy + 1,
+      z: cz + 0.5,
+    });
+    return { driver, player, zombie };
+  }
+
+  it("sets player.lastDamageMobType to the attacking mob's type on a melee hit", () => {
+    const { driver, player } = buildZombieInRange();
+    expect(player.lastDamageMobType).toBeNull();
+
+    // Use an advancing night clock so the zombie's attack cooldown advances.
+    // On tick 0 the zombie is in range with no cooldown → attacks immediately.
+    const clock = nightClock();
+    let hit = false;
+    for (let t = 0; t < 200; t++) {
+      const before = player.survival.health;
+      driver.aiTick(player, clock, clock.totalTicks);
+      advance(clock, 1);
+      if (player.survival.health < before) {
+        hit = true;
+        break;
+      }
+    }
+    expect(hit).toBe(true);
+    expect(player.lastDamageMobType).toBe("zombie");
+  });
+
+  it("sets player.lastDamageMobType to 'creeper' on a creeper explosion", () => {
+    const world = new World(2);
+    const cx = 4;
+    const cy = 64;
+    const cz = 4;
+    // Solid stone pocket around the creeper for the blast to destroy.
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dz = -3; dz <= 3; dz++) {
+          world.setBlock(cx + dx, cy + dy, cz + dz, Blocks.STONE);
+        }
+      }
+    }
+    // Air shaft at the creeper/player column so line-of-sight is clear.
+    for (let dy = 0; dy <= 4; dy++) {
+      world.setBlock(cx, cy + dy, cz, Blocks.AIR);
+    }
+    const driver = new MobDriver(world, new RecordingRenderer());
+
+    const creeper = driver.manager.spawn("creeper", {
+      x: cx + 0.5,
+      y: cy,
+      z: cz + 0.5,
+    });
+    creeper.aiState = "fuse";
+    creeper.fuseTimer = 1; // detonates this tick
+
+    const player = new Player({ x: cx + 0.5, y: cy + 1, z: cz + 0.5 });
+    player.survival.health = 20;
+    expect(player.lastDamageMobType).toBeNull();
+
+    driver.aiTick(player, nightClock(), 100);
+
+    // Creeper explosion should have attributed damage to "creeper".
+    expect(player.lastDamageMobType).toBe("creeper");
   });
 });

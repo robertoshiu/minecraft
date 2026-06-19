@@ -76,7 +76,7 @@ import { WorkbenchScreen } from "./ui/workbench-screen";
 import { BrewingStandScreen } from "./ui/brewing-stand-screen";
 import { BrewingStands } from "./crafting/brewing-stands";
 import { HelpOverlay } from "./ui/help-overlay";
-import { showDeath, hideDeath, DeathScreenState } from "./ui/death-screen";
+import { showDeath, hideDeath, DeathScreenState, formatDeathCause } from "./ui/death-screen";
 import {
   type Prefs,
   DEFAULT_PREFS,
@@ -1225,7 +1225,7 @@ engine.runRenderLoop(() => {
     // no longer auto-respawns). On the rising edge, show the overlay; the
     // outer freeze (deathState.isShown()) then halts ticks until Respawn.
     if (isDead(player.survival)) {
-      if (deathState.show("You ran out of health")) {
+      if (deathState.show(formatDeathCause(player.lastDamageMobType))) {
         showDeath(deathState.cause(), respawnPlayer);
         releasePointer();
       }

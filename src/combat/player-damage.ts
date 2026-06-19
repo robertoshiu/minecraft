@@ -40,6 +40,12 @@ export function applyPlayerDamage(
   currentTick: number,
   source: DamageSource = "melee",
 ): void {
+  // Environmental hits clear any lingering mob attribution so a fall/fire death
+  // is never mis-attributed to an earlier mob hit.
+  if (source === "fall" || source === "fire") {
+    player.lastDamageMobType = null;
+  }
+
   // Fire is FULLY negated (not merely reduced) when fire_resistance is active.
   // Keyed on source === "fire" only, so all other sources are byte-identical.
   if (source === "fire" && hasEffect(player.effects, "fire_resistance")) return;

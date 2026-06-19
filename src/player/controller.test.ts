@@ -160,4 +160,10 @@ describe("Player.update — knockback channel", () => {
     const player = new Player({ x: 0, y: 64, z: 0 });
     expect(() => player.update(noInput(), 0, world)).not.toThrow();
   });
+  it("respawn clears lastDamageMobType", () => {
+    const player = new Player({ x: 0, y: 64, z: 0 });
+    player.lastDamageMobType = "zombie";
+    player.respawn({ x: 0, y: 64, z: 0 });
+    expect(player.lastDamageMobType).toBeNull();
+  });
 });

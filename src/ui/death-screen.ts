@@ -10,6 +10,22 @@
  * `--accent` Respawn button (see DESIGN.md › Death Screen).
  */
 
+import type { MobType } from "../rules/mob-stats";
+
+/**
+ * Pure helper: returns "Killed by Zombie" (title-cased from the mob type) when
+ * a mob type is known, or the generic fallback when it is null.
+ *
+ * Exported so it can be used by main.ts and tested independently.
+ */
+export function formatDeathCause(lastDamageMobType: MobType | null): string {
+  if (lastDamageMobType === null) return "You ran out of health";
+  // Title-case: first character upper, rest lower (all current types are one word).
+  const titled =
+    lastDamageMobType.charAt(0).toUpperCase() + lastDamageMobType.slice(1).toLowerCase();
+  return `Killed by ${titled}`;
+}
+
 /** Whether the DOM is available (false under node / unit tests). */
 function hasDom(): boolean {
   return typeof document !== "undefined";

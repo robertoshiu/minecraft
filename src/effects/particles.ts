@@ -51,7 +51,7 @@ export interface ParticleConfig {
  * Values are tuned to feel like Minecraft debris/effects at 20 TPS.
  */
 export const PARTICLE_CONFIGS: Record<
-  "break" | "place" | "footstep" | "explosion" | "mobHurt" | "mobDeath",
+  "break" | "place" | "footstep" | "explosion" | "mobHurt" | "mobDeath" | "mobSpawn",
   ParticleConfig
 > = {
   /** Block break: bright colour debris that arc up then fall. */
@@ -113,6 +113,21 @@ export const PARTICLE_CONFIGS: Record<
     maxSize: 0.2,
     gravity: 7.0,
     speed: 3.0,
+  },
+  /**
+   * Mob spawn: small golden dust puff that signals a mob appearing.
+   * Color matches DESIGN.md --accent (#d4a843) golden tone.
+   * Slight upward motion (negative gravity = upward drift) so the dust
+   * rises briefly before dispersing — visually reads as "materialise".
+   */
+  mobSpawn: {
+    count: 6,
+    minLifeMs: 300,
+    maxLifeMs: 400,
+    minSize: 0.05,
+    maxSize: 0.12,
+    gravity: -1.5, // slight upward drift
+    speed: 1.2,
   },
 };
 
@@ -196,6 +211,15 @@ export class ParticleManager {
   /** Larger burst when a mob dies. */
   mobDeath(pos: { x: number; y: number; z: number }, color: [number, number, number]): void {
     this._burst("mobDeath", pos, color);
+  }
+
+  /**
+   * Small golden dust puff when a mob spawns. Color is fixed to the
+   * DESIGN.md --accent gold (#d4a843 ≈ [0.831, 0.659, 0.263]).
+   */
+  mobSpawn(pos: { x: number; y: number; z: number }): void {
+    // DESIGN.md --accent: #d4a843 → R=212/255, G=168/255, B=67/255
+    this._burst("mobSpawn", pos, [0.831, 0.659, 0.263]);
   }
 
   // --- Introspection -------------------------------------------------------

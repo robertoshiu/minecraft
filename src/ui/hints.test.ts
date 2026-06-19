@@ -275,4 +275,69 @@ describe("HintManager", () => {
       mgr.dispose();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // onNightfall()
+  // -------------------------------------------------------------------------
+
+  describe("onNightfall()", () => {
+    it("enqueues the 'darkness' hint and shows it exactly once", async () => {
+      const mgr = new HintManager(store);
+      await mgr.load();
+
+      mgr.onNightfall();
+      await flushMicrotasks();
+
+      // "darkness" should be marked shown immediately (show() persists before display).
+      const shown = await readShownHints(store);
+      expect(shown).toContain("darkness");
+
+      mgr.dispose();
+    });
+
+    it("calling onNightfall() twice does NOT re-queue 'darkness'", async () => {
+      const mgr = new HintManager(store);
+      await mgr.load();
+
+      mgr.onNightfall();
+      // Advance through full display cycle.
+      await tickMs(300 + 5000 + 500 + 50);
+
+      const shown1 = await readShownHints(store);
+      expect(shown1.filter((x) => x === "darkness")).toHaveLength(1);
+
+      // Second call — should be a no-op.
+      mgr.onNightfall();
+      await tickMs(300 + 5000 + 500 + 50);
+
+      const shown2 = await readShownHints(store);
+      expect(shown2.filter((x) => x === "darkness")).toHaveLength(1);
+
+      mgr.dispose();
+    });
+
+    it("'darkness' hint is not shown if already shown in a prior session", async () => {
+      // Pre-populate: prior session shows "darkness".
+      const priorMgr = new HintManager(store);
+      await priorMgr.load();
+      priorMgr.onNightfall();
+      await tickMs(50);
+      priorMgr.dispose();
+
+      // New session, same store.
+      vi.useRealTimers();
+      vi.useFakeTimers();
+
+      const mgr = new HintManager(store);
+      await mgr.load();
+      mgr.onNightfall();
+      await tickMs(300 + 5000 + 500 + 50);
+
+      const shown = await readShownHints(store);
+      // Still exactly one occurrence.
+      expect(shown.filter((x) => x === "darkness")).toHaveLength(1);
+
+      mgr.dispose();
+    });
+  });
 });

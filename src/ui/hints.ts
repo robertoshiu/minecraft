@@ -37,6 +37,7 @@ export const HINTS: readonly HintDef[] = [
   { id: "place",     message: "Right-click to place blocks" },
   { id: "inventory", message: "Press E to open inventory" },
   { id: "help",      message: "Press H for full controls" },
+  { id: "darkness",  message: "Monsters spawn in the dark — light up caves and shelters." },
 ];
 
 // ---------------------------------------------------------------------------
@@ -168,6 +169,16 @@ export class HintManager {
    */
   onInventoryOpen(): void {
     this.enqueue("help");
+  }
+
+  /**
+   * Call on the rising edge of nightfall (isNight goes false → true).
+   * Queues the "darkness" hint to inform the player about cave/darkness spawns.
+   * The hint wording is accurate: in this game the open night surface is safe —
+   * hostile mobs only spawn where skylight ≤ 7 (enclosed / cave darkness).
+   */
+  onNightfall(): void {
+    this.enqueue("darkness");
   }
 
   /**

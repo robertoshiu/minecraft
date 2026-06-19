@@ -224,3 +224,46 @@ describe("ParticleManager active-particle cap (NullEngine)", () => {
     expect(() => freshManager.dispose()).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// mobSpawn config shape
+// ---------------------------------------------------------------------------
+
+describe("PARTICLE_CONFIGS.mobSpawn", () => {
+  it("exists in PARTICLE_CONFIGS", () => {
+    expect(PARTICLE_CONFIGS).toHaveProperty("mobSpawn");
+  });
+
+  it("has count ~6 (small dust puff)", () => {
+    expect(PARTICLE_CONFIGS.mobSpawn.count).toBe(6);
+  });
+
+  it("has positive minLifeMs and maxLifeMs", () => {
+    expect(PARTICLE_CONFIGS.mobSpawn.minLifeMs).toBeGreaterThan(0);
+    expect(PARTICLE_CONFIGS.mobSpawn.maxLifeMs).toBeGreaterThan(0);
+  });
+
+  it("maxLifeMs >= minLifeMs", () => {
+    expect(PARTICLE_CONFIGS.mobSpawn.maxLifeMs).toBeGreaterThanOrEqual(
+      PARTICLE_CONFIGS.mobSpawn.minLifeMs,
+    );
+  });
+
+  it("life is short (maxLifeMs <= 500ms — transient puff)", () => {
+    expect(PARTICLE_CONFIGS.mobSpawn.maxLifeMs).toBeLessThanOrEqual(500);
+  });
+
+  it("size is small (maxSize < 0.2)", () => {
+    expect(PARTICLE_CONFIGS.mobSpawn.maxSize).toBeLessThan(0.2);
+  });
+
+  it("gravity is negative (slight upward drift)", () => {
+    expect(PARTICLE_CONFIGS.mobSpawn.gravity).toBeLessThan(0);
+  });
+});
+
+describe("ParticleManager.mobSpawn (NullEngine)", () => {
+  it("does not throw", () => {
+    expect(() => manager.mobSpawn(POS)).not.toThrow();
+  });
+});

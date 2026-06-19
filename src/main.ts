@@ -46,7 +46,7 @@ import { makeDefaultInventory } from "./inventory/default-inventory";
 import { Blocks, EXHAUSTION, HUNGER, TICKS_PER_SECOND, TIME, ARROW, FIRE, SPLASH, EFFECT_TUNING } from "./rules/mc-1.20";
 import { nextBurningTicks, fireDamageDue } from "./combat/fire";
 import { applyPlayerDamage } from "./combat/player-damage";
-import { makeClock, advance, tickOfDay, dayNumber } from "./time/clock";
+import { makeClock, advance, tickOfDay, dayNumber, isNight } from "./time/clock";
 import { canSleep, sleepToDawn } from "./sleep/bed";
 import { skyColorAt, sunLightIntensityAt } from "./time/sky";
 import { USE_PBR_TERRAIN } from "./rendering/terrain-material";
@@ -317,8 +317,12 @@ if (gameEffects !== null) {
       ge.onExplosion(pos);
     },
   };
-  // Carry through optional-only callbacks that don't need particle augmentation.
-  if (prevOnSpawn !== undefined) newCallbacks.onSpawn = prevOnSpawn;
+  // onSpawn: chain audio (if present) + spawn-dust particles.
+  newCallbacks.onSpawn = (type, pos) => {
+    prevOnSpawn?.(type, pos);
+    // Emit a small golden dust puff at the spawn position (DESIGN --accent).
+    particleManager?.mobSpawn(pos);
+  };
   if (prevOnCreeperFuse !== undefined) newCallbacks.onCreeperFuse = prevOnCreeperFuse;
   mobDriver.audioCallbacks = newCallbacks;
 }
@@ -1012,6 +1016,11 @@ let firstFrameRendered = false;
 let accumulator = 0;
 let lastTime = performance.now();
 
+// Nightfall rising-edge tracking: fires hintManager.onNightfall() once on the
+// first tick where isNight transitions false → true (mirrors the creeper
+// wasFusing rising-edge pattern in mob-driver.ts).
+let prevWasNight = isNight(clock);
+
 /** Respawn the player at the world spawn, hide the death screen, and resume. */
 function respawnPlayer(): void {
   player.respawn(spawnPoint); // also zeros burningTicks (and knockback) via Player.respawn()
@@ -1103,6 +1112,14 @@ engine.runRenderLoop(() => {
       );
     advance(clock, 1);
     brewingStands.tickAll();
+
+    // Nightfall rising-edge: fire the darkness hint the first tick night begins.
+    const nowIsNight = isNight(clock);
+    if (nowIsNight && !prevWasNight) {
+      hintManager?.onNightfall();
+    }
+    prevWasNight = nowIsNight;
+
     // Mobs advance on the same fixed tick. currentTick is the clock's monotonic
     // counter (post-advance), shared by spawn gating, AI, and combat timing.
     const currentTick = clock.totalTicks;

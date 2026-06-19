@@ -31,7 +31,7 @@ import {
 import { getAtlasIconStyle } from "./item-icon";
 
 /** Whether the DOM is available (false under node / unit tests). */
-function hasDom(): boolean {
+export function hasDom(): boolean {
   return typeof document !== "undefined";
 }
 
@@ -55,6 +55,8 @@ function styleSlot(el: HTMLElement): void {
   el.style.color = "var(--text-primary, #e8e6e1)";
   el.style.cursor = "pointer";
   el.style.userSelect = "none";
+  // Bounce transition: allow scale transitions for click feedback.
+  el.style.transition = "transform 80ms ease-out, border-color 80ms ease-out, box-shadow 80ms ease-out";
 }
 
 /** Render a stack (or null) into a slot element via the pure view-model. */
@@ -108,6 +110,9 @@ export class InventoryScreen {
   private outputSlot: HTMLElement | null = null;
   private cursorEl: HTMLElement | null = null;
 
+  /** Visually-hidden live region for screen-reader announcements. */
+  private ariaLive: HTMLElement | null = null;
+
   private open_ = false;
 
   /** The cursor-held stack (picked up via clicks). Null when the hand is empty. */
@@ -118,6 +123,21 @@ export class InventoryScreen {
    * While set, the dragged item is visually lifted (source slot shows empty).
    */
   private dragState: DragState | null = null;
+
+  /**
+   * Client coords where the current drag began (set alongside dragState).
+   * Used to distinguish a stationary click from a genuine drag.
+   */
+  private dragStart: { x: number; y: number } | null = null;
+
+  /**
+   * Pixel radius within which a same-slot mousedown/mouseup pair is treated
+   * as a click rather than a cancelled drag.
+   */
+  private static readonly DRAG_TOLERANCE_PX = 5;
+
+  /** Icon style computed once at drag-start (reused by mousemove). */
+  private dragIconStyle: import("./item-icon").AtlasIconStyle | null = null;
 
   /** The 2×2 hand-craft model (item ids backed by the inventory). */
   private readonly craft = new HandCraftModel();
@@ -168,7 +188,14 @@ export class InventoryScreen {
     for (let i = 0; i < Inventory.SLOTS; i++) {
       const el = this.invSlots[i];
       if (el === undefined) continue;
-      fillSlot(el, inventory.get(i));
+      // While dragging, show the source slot at 50% opacity as a ghost.
+      if (this.dragState !== null && i === this.dragState.sourceSlot) {
+        fillSlot(el, this.dragState.item);
+        el.style.opacity = "0.5";
+      } else {
+        fillSlot(el, inventory.get(i));
+        el.style.opacity = "";
+      }
     }
 
     for (let i = 0; i < HAND_GRID_CELLS; i++) {
@@ -264,25 +291,41 @@ export class InventoryScreen {
     for (let i = 0; i < Inventory.SLOTS; i++) {
       const cell = document.createElement("div");
       styleSlot(cell);
+      cell.setAttribute("role", "button");
       const idx = i;
       cell.addEventListener("mouseenter", () => {
         cell.style.background = "var(--bg-slot-hover, #2f333d)";
       });
       cell.addEventListener("mouseleave", () => {
         cell.style.background = "var(--bg-slot, #252830)";
+        // Reset click bounce on leave.
+        cell.style.transform = "";
+        cell.style.borderColor = "";
+        cell.style.boxShadow = "";
       });
       cell.addEventListener("mousedown", (e) => {
         if (e.button === 0 && !e.shiftKey) {
-          this.onInventorySlotMouseDown(idx);
+          // Click bounce + accent border on press.
+          cell.style.transform = "scale(1.08)";
+          cell.style.borderColor = "var(--accent, #d4a843)";
+          cell.style.boxShadow = "0 0 8px rgba(212,168,67,0.4)";
+          this.onInventorySlotMouseDown(idx, e.clientX, e.clientY);
+          e.stopPropagation();
         }
       });
       cell.addEventListener("mouseup", (e) => {
         if (e.button === 0) {
-          this.onInventorySlotMouseUp(idx, e.shiftKey);
+          // Reset bounce.
+          cell.style.transform = "";
+          cell.style.borderColor = "";
+          cell.style.boxShadow = "";
+          this.onInventorySlotMouseUp(idx, e.shiftKey, e.clientX, e.clientY);
+          e.stopPropagation();
         }
       });
       cell.addEventListener("contextmenu", (e) => {
         e.preventDefault();
+        e.stopPropagation();
         this.onInventorySlotRightClick(idx);
       });
       invGrid.appendChild(cell);
@@ -306,12 +349,14 @@ export class InventoryScreen {
       const isDragging = this.dragState !== null;
       const hasCursor = this.cursor !== null;
       if (isDragging || hasCursor) {
+        // Only update position — do NOT re-render the inventory on every pixel.
         cursorEl.style.left = `${String(e.clientX + 12)}px`;
         cursorEl.style.top = `${String(e.clientY + 12)}px`;
       }
     });
 
     // Mouseup on the overlay backdrop (not on a slot) cancels any active drag.
+    // Slots call e.stopPropagation() so this only fires for true backdrop releases.
     root.addEventListener("mouseup", (e) => {
       if (e.button === 0 && this.dragState !== null) {
         this.cancelActiveDrag();
@@ -333,17 +378,31 @@ export class InventoryScreen {
     };
     document.addEventListener("keydown", onKeyDown);
 
+    // --- Visually-hidden aria-live region for announcements ----------------
+    const ariaLive = document.createElement("div");
+    ariaLive.setAttribute("aria-live", "polite");
+    ariaLive.setAttribute("aria-atomic", "true");
+    // Visually hidden but not display:none (screen readers ignore display:none).
+    ariaLive.style.position = "absolute";
+    ariaLive.style.width = "1px";
+    ariaLive.style.height = "1px";
+    ariaLive.style.overflow = "hidden";
+    ariaLive.style.clip = "rect(0,0,0,0)";
+    ariaLive.style.whiteSpace = "nowrap";
+    this.ariaLive = ariaLive;
+
     panel.appendChild(craftRow);
     panel.appendChild(invGrid);
     root.appendChild(panel);
     root.appendChild(cursorEl);
+    root.appendChild(ariaLive);
     host.appendChild(root);
     this.root = root;
   }
 
   // --- Click handlers (thin: delegate to pure helpers) ---------------------
 
-  private onInventorySlotMouseDown(index: number): void {
+  private onInventorySlotMouseDown(index: number, x: number, y: number): void {
     if (this.inventory === null) return;
     // Only start a drag if the cursor is empty (holding nothing) and the slot
     // has an item. If the cursor already holds an item, let mouseup handle the
@@ -352,32 +411,77 @@ export class InventoryScreen {
     const result = beginDrag(this.inventory, index);
     if (result === null) return;
     this.dragState = result.drag;
+    this.dragStart = { x, y };
+    // Pre-compute icon style for the drag ghost (reused by mousemove, not re-rendered).
+    this.dragIconStyle = getAtlasIconStyle(result.drag.item.itemId);
     // Clear the slot visually while dragging.
     this.inventory.set(index, result.clearedSlot);
     this.renderDragCursor();
     this.rerender();
   }
 
-  private onInventorySlotMouseUp(index: number, shiftKey: boolean): void {
+  private onInventorySlotMouseUp(
+    index: number,
+    shiftKey: boolean,
+    x: number,
+    y: number,
+  ): void {
     if (this.inventory === null) return;
 
     if (this.dragState !== null) {
-      // Completing a drag.
-      const { moved, sourceSlotValue, targetSlotValue } = applyDragMove(
-        this.dragState,
-        index,
-        this.inventory,
-      );
-      if (moved) {
-        this.inventory.set(this.dragState.sourceSlot, sourceSlotValue);
-        this.inventory.set(index, targetSlotValue);
+      if (index !== this.dragState.sourceSlot) {
+        // ---- Real drag to a different slot ----
+        const { moved, sourceSlotValue, targetSlotValue } = applyDragMove(
+          this.dragState,
+          index,
+          this.inventory,
+        );
+        if (moved) {
+          this.inventory.set(this.dragState.sourceSlot, sourceSlotValue);
+          this.inventory.set(index, targetSlotValue);
+          // Flash target slot green on successful drop (DESIGN --success #4caf50, 100ms).
+          this.flashSlotSuccess(index);
+        } else {
+          // Dropped on the same slot via a different path — restore.
+          this.inventory.set(index, sourceSlotValue);
+        }
+        this.dragState = null;
+        this.dragStart = null;
+        this.dragIconStyle = null;
+        this.rerender();
+        return;
       } else {
-        // Dropped on the same slot — restore.
-        this.inventory.set(index, sourceSlotValue);
+        // ---- Mouseup on the SAME slot as mousedown ----
+        const dx = x - (this.dragStart?.x ?? x);
+        const dy = y - (this.dragStart?.y ?? y);
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist <= InventoryScreen.DRAG_TOLERANCE_PX) {
+          // Stationary enough to be a click: restore item to slot, then apply click.
+          this.inventory.set(index, this.dragState.item);
+          this.dragState = null;
+          this.dragStart = null;
+          this.dragIconStyle = null;
+          // Fall through to normal click path.
+          const slot = this.inventory.get(index);
+          const r = applySlotClick(this.cursor, slot);
+          this.cursor = r.cursor;
+          this.inventory.set(index, r.slot);
+          // Announce pickup to screen reader.
+          if (this.cursor !== null) {
+            this.announce(`Picked up ${slotView(this.cursor).name}`);
+          }
+          this.rerender();
+          return;
+        } else {
+          // Genuine drag but released on origin — cancel (snap back).
+          this.cancelActiveDrag();
+          this.dragStart = null;
+          this.dragIconStyle = null;
+          this.rerender();
+          return;
+        }
       }
-      this.dragState = null;
-      this.rerender();
-      return;
     }
 
     // No drag in progress — treat as a normal click.
@@ -388,11 +492,19 @@ export class InventoryScreen {
       const r = applySlotClick(this.cursor, slot);
       this.cursor = r.cursor;
       this.inventory.set(index, r.slot);
+      // Announce pickup/placement to screen reader.
+      if (this.cursor !== null) {
+        this.announce(`Picked up ${slotView(this.cursor).name}`);
+      } else if (r.slot !== null) {
+        this.announce(`Placed ${slotView(r.slot).name}`);
+      }
       this.rerender();
     }
   }
 
   private onInventorySlotRightClick(index: number): void {
+    // Suppress right-click while a drag is in progress (avoid state corruption).
+    if (this.dragState !== null) return;
     if (this.inventory === null) return;
     const slot = this.inventory.get(index);
     const r = applyRightClick(this.cursor, slot);
@@ -449,16 +561,63 @@ export class InventoryScreen {
       this.cursorEl.style.display = "none";
       return;
     }
-    const v = slotView(displayStack);
-    this.cursorEl.textContent = `${v.label} ${v.count}`;
+
+    // If we have a pre-computed drag icon, render it; otherwise fall back to text.
+    const iconStyle = this.dragIconStyle ?? getAtlasIconStyle(displayStack.itemId);
+    if (iconStyle !== null) {
+      // Show icon with scale-up + drop shadow per DESIGN (drag: scale 1.1 + drop shadow).
+      this.cursorEl.textContent = "";
+      this.cursorEl.style.backgroundImage = iconStyle.backgroundImage;
+      this.cursorEl.style.backgroundSize = iconStyle.backgroundSize;
+      this.cursorEl.style.backgroundPosition = iconStyle.backgroundPosition;
+      this.cursorEl.style.imageRendering = iconStyle.imageRendering;
+      this.cursorEl.style.width = "44px";
+      this.cursorEl.style.height = "44px";
+      this.cursorEl.style.transform = "scale(1.1)";
+      this.cursorEl.style.filter = "drop-shadow(0 4px 8px rgba(0,0,0,0.6))";
+      this.cursorEl.style.padding = "0";
+    } else {
+      // Text fallback.
+      const v = slotView(displayStack);
+      this.cursorEl.textContent = `${v.label} ${String(v.count)}`;
+      this.cursorEl.style.backgroundImage = "";
+      this.cursorEl.style.backgroundSize = "";
+      this.cursorEl.style.backgroundPosition = "";
+      this.cursorEl.style.imageRendering = "";
+      this.cursorEl.style.width = "";
+      this.cursorEl.style.height = "";
+      this.cursorEl.style.transform = "";
+      this.cursorEl.style.filter = "";
+      this.cursorEl.style.padding = "2px 6px";
+    }
     this.cursorEl.style.display = "block";
   }
 
   /** Update the floating cursor element to show the drag item immediately. */
   private renderDragCursor(): void {
     if (this.cursorEl === null || this.dragState === null) return;
-    const v = slotView(this.dragState.item);
-    this.cursorEl.textContent = `${v.label} ${v.count}`;
+    const iconStyle = this.dragIconStyle ?? getAtlasIconStyle(this.dragState.item.itemId);
+    if (iconStyle !== null) {
+      this.cursorEl.textContent = "";
+      this.cursorEl.style.backgroundImage = iconStyle.backgroundImage;
+      this.cursorEl.style.backgroundSize = iconStyle.backgroundSize;
+      this.cursorEl.style.backgroundPosition = iconStyle.backgroundPosition;
+      this.cursorEl.style.imageRendering = iconStyle.imageRendering;
+      this.cursorEl.style.width = "44px";
+      this.cursorEl.style.height = "44px";
+      this.cursorEl.style.transform = "scale(1.1)";
+      this.cursorEl.style.filter = "drop-shadow(0 4px 8px rgba(0,0,0,0.6))";
+      this.cursorEl.style.padding = "0";
+    } else {
+      const v = slotView(this.dragState.item);
+      this.cursorEl.textContent = `${v.label} ${String(v.count)}`;
+      this.cursorEl.style.backgroundImage = "";
+      this.cursorEl.style.width = "";
+      this.cursorEl.style.height = "";
+      this.cursorEl.style.transform = "";
+      this.cursorEl.style.filter = "";
+      this.cursorEl.style.padding = "2px 6px";
+    }
     this.cursorEl.style.display = "block";
   }
 
@@ -479,6 +638,8 @@ export class InventoryScreen {
       }
     }
     this.dragState = null;
+    this.dragStart = null;
+    this.dragIconStyle = null;
   }
 
   /** Return any cursor-held stack into the inventory (used when closing). */
@@ -486,6 +647,29 @@ export class InventoryScreen {
     if (this.cursor === null || this.inventory === null) return;
     const leftover = this.inventory.add(this.cursor);
     this.cursor = leftover > 0 ? { ...this.cursor, count: leftover } : null;
+  }
+
+  /**
+   * Flash a slot's border green (~100ms) to indicate a successful drop.
+   * Only fires after a genuine cross-slot drag move.
+   */
+  private flashSlotSuccess(slotIndex: number): void {
+    const el = this.invSlots[slotIndex];
+    if (el === undefined) return;
+    el.style.borderColor = "var(--success, #4caf50)";
+    el.style.boxShadow = "0 0 6px rgba(76,175,80,0.5)";
+    setTimeout(() => {
+      if (el !== undefined) {
+        el.style.borderColor = "";
+        el.style.boxShadow = "";
+      }
+    }, 100);
+  }
+
+  /** Announce a message to screen readers via the aria-live region. */
+  private announce(message: string): void {
+    if (this.ariaLive === null) return;
+    this.ariaLive.textContent = message;
   }
 }
 

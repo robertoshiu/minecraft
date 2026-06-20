@@ -18,6 +18,17 @@ import type { Mob } from "./entity";
 import type { BlockId } from "../rules/mc-1.20";
 import { Blocks, MOB_CAP, LIGHT } from "../rules/mc-1.20";
 
+/**
+ * Natural surface block types on which passive mobs may spawn.
+ * Covers grass, dirt, sand (desert), and snow (snow biome) surfaces.
+ */
+const PASSIVE_SPAWN_FLOORS: readonly BlockId[] = [
+  Blocks.GRASS,
+  Blocks.DIRT,
+  Blocks.SAND,
+  Blocks.SNOW,
+] as const;
+
 /** Ticks after taking damage during which a mob is "in combat" and never despawns. */
 const COMBAT_GRACE_TICKS = 40;
 
@@ -45,8 +56,8 @@ export function canSpawnHostileAt(
 /**
  * True iff a passive mob may spawn at a candidate cell.
  *
- * Requires daytime, bright light (`skylight >= LIGHT.PASSIVE_MIN`), a grass
- * floor block, and headroom above.
+ * Requires daytime, bright light (`skylight >= LIGHT.PASSIVE_MIN`), a natural
+ * surface floor block (grass, dirt, sand, or snow), and headroom above.
  */
 export function canSpawnPassiveAt(
   skylight: number,
@@ -57,7 +68,7 @@ export function canSpawnPassiveAt(
   return (
     !night &&
     skylight >= LIGHT.PASSIVE_MIN &&
-    floorBlock === Blocks.GRASS &&
+    PASSIVE_SPAWN_FLOORS.includes(floorBlock) &&
     hasHeadroom
   );
 }

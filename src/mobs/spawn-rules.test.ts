@@ -54,9 +54,14 @@ describe("canSpawnPassiveAt", () => {
     expect(canSpawnPassiveAt(LIGHT.PASSIVE_MIN - 1, false, Blocks.GRASS, true)).toBe(false);
   });
 
-  it("rejects on a non-grass floor block", () => {
+  it("rejects on non-spawnable floor (STONE)", () => {
     expect(canSpawnPassiveAt(LIGHT.SKY_MAX, false, Blocks.STONE, true)).toBe(false);
-    expect(canSpawnPassiveAt(LIGHT.SKY_MAX, false, Blocks.DIRT, true)).toBe(false);
+  });
+
+  it("allows spawn on natural surface blocks: DIRT, SAND, SNOW", () => {
+    expect(canSpawnPassiveAt(LIGHT.SKY_MAX, false, Blocks.DIRT, true)).toBe(true);
+    expect(canSpawnPassiveAt(LIGHT.SKY_MAX, false, Blocks.SAND, true)).toBe(true);
+    expect(canSpawnPassiveAt(LIGHT.SKY_MAX, false, Blocks.SNOW, true)).toBe(true);
   });
 
   it("rejects without headroom", () => {

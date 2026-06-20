@@ -719,6 +719,11 @@ canvas.addEventListener("click", () => {
   }
 });
 
+// Surface pointer-lock failures so players know why clicks do nothing.
+document.addEventListener("pointerlockerror", () => {
+  showToast("Pointer lock was blocked — click the game once and allow pointer lock if your browser prompts.");
+});
+
 // Suppress the context menu so right-click can place blocks.
 canvas.addEventListener("contextmenu", (e) => {
   e.preventDefault();
@@ -996,11 +1001,15 @@ function updateRenderDiag(nowMs: number): void {
   const atlasTex = activeTextures.find((t) => t.name === "terrain-atlas") ?? null;
   const atlasTextureReady = atlasTex !== null ? atlasTex.isReady() : false;
 
+  const passiveCount = mobDriver.manager.countPassive();
+  const hostileCount = mobDriver.manager.countHostile();
+  const mobMeshCount = mobRenderer.getMeshCount();
   renderDiagEl.textContent =
     `meshes:${opaqueMeshCount} ` +
     `opq:${opaqueMaterialReady ? "ok" : "NO"} ` +
     `trn:${transparentMaterialReady ? "ok" : "NO"} ` +
-    `atlas:${atlasTextureReady ? "ok" : "NO"}`;
+    `atlas:${atlasTextureReady ? "ok" : "NO"} ` +
+    `mobs:${passiveCount}p/${hostileCount}h rend:${mobMeshCount}`;
 }
 
 // --- FPS element + ready promise ------------------------------------------

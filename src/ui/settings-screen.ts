@@ -316,7 +316,7 @@ export class SettingsScreen {
     };
 
     addSection("Video");
-    this.sliders.renderDistance = addSlider(card, "Render Distance", 3, 2, 6, 1, (v) => {
+    this.sliders.renderDistance = addSlider(card, "Render Distance", 8, 2, 12, 1, (v) => {
       if (this.currentPrefs !== null) { this.currentPrefs.renderDistance = v; emit(); }
     });
     this.sliders.fov = addSlider(card, "Field of View", 75, 60, 110, 1, (v) => {

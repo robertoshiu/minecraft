@@ -19,9 +19,9 @@ describe("clampPrefs", () => {
     expect(result).toEqual(DEFAULT_PREFS);
   });
 
-  it("clamps renderDistance to [2..6]", () => {
+  it("clamps renderDistance to [2..12]", () => {
     expect(clampPrefs({ ...DEFAULT_PREFS, renderDistance: 1 }).renderDistance).toBe(2);
-    expect(clampPrefs({ ...DEFAULT_PREFS, renderDistance: 7 }).renderDistance).toBe(6);
+    expect(clampPrefs({ ...DEFAULT_PREFS, renderDistance: 13 }).renderDistance).toBe(12);
     expect(clampPrefs({ ...DEFAULT_PREFS, renderDistance: 4 }).renderDistance).toBe(4);
   });
 

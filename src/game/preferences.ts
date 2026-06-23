@@ -22,7 +22,7 @@ export const VALID_TONE_MAPPING_MODES: ReadonlyArray<ToneMappingMode> = [
 
 /** All user-adjustable settings. */
 export interface Prefs {
-  /** View distance in chunk columns (2..6). */
+  /** View distance in chunk columns (2..12). */
   renderDistance: number;
   /** Camera FOV in degrees (60..110). */
   fov: number;
@@ -56,7 +56,7 @@ export interface Prefs {
 
 /** Sensible defaults — what a fresh install starts with. */
 export const DEFAULT_PREFS: Prefs = {
-  renderDistance: 3,
+  renderDistance: 8,
   fov: 75,
   mouseSensitivity: 1.0,
   masterVolume: 1.0,
@@ -93,7 +93,7 @@ export function clampPrefs(p: Prefs): Prefs {
   ];
 
   return {
-    renderDistance: Math.round(clampField(p.renderDistance, 2, 6, DEFAULT_PREFS.renderDistance)),
+    renderDistance: Math.round(clampField(p.renderDistance, 2, 12, DEFAULT_PREFS.renderDistance)),
     fov: clampField(p.fov, 60, 110, DEFAULT_PREFS.fov),
     mouseSensitivity: clampField(p.mouseSensitivity, 0.2, 3, DEFAULT_PREFS.mouseSensitivity),
     masterVolume: clampField(p.masterVolume, 0, 1, DEFAULT_PREFS.masterVolume),

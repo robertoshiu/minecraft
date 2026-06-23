@@ -98,8 +98,8 @@ import { tickEffects, swiftnessMultiplier, strengthBonus, applyEffect, applyInst
 
 /** World seed + how many columns of terrain to generate around the origin. */
 const WORLD_SEED = 1337;
-/** radius 5 → 11×11 = 121 columns; boots in a few seconds. */
-const WORLD_RADIUS_COLUMNS = 5;
+/** radius 8 → 17×17 = 289 columns; boots in a few seconds. */
+const WORLD_RADIUS_COLUMNS = 8;
 /** Reach distance for mining / placing (blocks). */
 const REACH = 6;
 /** Fixed physics tick length (seconds) — one Minecraft tick at 20 TPS. */
@@ -130,8 +130,8 @@ scene.clearColor = new Color4(sky0r, sky0g, sky0b, 1);
 
 scene.fogMode = Scene.FOGMODE_LINEAR;
 scene.fogColor = new Color3(sky0r, sky0g, sky0b);
-scene.fogStart = 60;
-scene.fogEnd = 130;
+scene.fogStart = 100;
+scene.fogEnd = 170;
 
 // --- Camera: MOUSE-LOOK ONLY (no self-movement) --------------------------
 const camera = new UniversalCamera("camera", new Vector3(0, 110, 0), scene);

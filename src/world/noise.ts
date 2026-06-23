@@ -11,22 +11,12 @@
 // No third-party deps, no Math.random, no Date: identical output for a given
 // seed across runs and machines.
 
+import { mulberry32 } from "./rng";
+
 export type NoiseFn2D = (x: number, z: number) => number;
 export type NoiseFn3D = (x: number, y: number, z: number) => number;
 
 // --- 32-bit PRNG / hash helpers -------------------------------------------
-
-/** mulberry32: tiny, fast, deterministic 32-bit PRNG. Returns [0, 1). */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 /**
  * Deterministic integer hash of (seed, x, y) -> [0, 1).

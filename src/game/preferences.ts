@@ -8,7 +8,7 @@
  * {@link atomicWrite} / {@link safeRead} (same pattern as the game save).
  */
 
-import { atomicWrite, safeRead, type SaveStore } from "../save/store";
+import { atomicWrite, loadOrDefault, type SaveStore } from "../save/store";
 import { type ColorblindMode } from "../ui/a11y";
 
 /** Tone-mapping / color-grade mode (Phase 6c A/B toggle). */
@@ -190,13 +190,7 @@ const PREFS_KEY = "prefs";
  * absence or parse failure — never throws.
  */
 export async function loadPrefs(store: SaveStore): Promise<Prefs> {
-  try {
-    const bytes = await safeRead(store, PREFS_KEY);
-    if (bytes === null || bytes.byteLength === 0) return { ...DEFAULT_PREFS };
-    return parsePrefs(bytes);
-  } catch {
-    return { ...DEFAULT_PREFS };
-  }
+  return loadOrDefault(store, PREFS_KEY, parsePrefs, () => ({ ...DEFAULT_PREFS }));
 }
 
 /**

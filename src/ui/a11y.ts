@@ -10,7 +10,7 @@
  * RGB values are in [0, 1] (matching palette.ts convention).
  */
 
-import { atomicWrite, safeRead, type SaveStore } from "../save/store";
+import { atomicWrite, loadOrDefault, type SaveStore } from "../save/store";
 import { Blocks } from "../rules/mc-1.20";
 
 // ---------------------------------------------------------------------------
@@ -205,13 +205,7 @@ function parseA11y(bytes: Uint8Array): A11yData {
 const A11Y_KEY = "a11y";
 
 async function loadA11yData(store: SaveStore): Promise<A11yData> {
-  try {
-    const bytes = await safeRead(store, A11Y_KEY);
-    if (bytes === null || bytes.byteLength === 0) return { ...DEFAULT_A11Y_DATA };
-    return parseA11y(bytes);
-  } catch {
-    return { ...DEFAULT_A11Y_DATA };
-  }
+  return loadOrDefault(store, A11Y_KEY, parseA11y, () => ({ ...DEFAULT_A11Y_DATA }));
 }
 
 async function saveA11yData(store: SaveStore, data: A11yData): Promise<void> {

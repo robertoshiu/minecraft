@@ -107,6 +107,26 @@ export async function safeRead(
   return store.get(key + BAK_SUFFIX);
 }
 
+/**
+ * Load a value from the store using {@link safeRead}, parse it with `parse`,
+ * and return `fallback()` on absence, empty bytes, or any parse error.
+ * Never throws.
+ */
+export async function loadOrDefault<T>(
+  store: SaveStore,
+  key: string,
+  parse: (bytes: Uint8Array) => T,
+  fallback: () => T,
+): Promise<T> {
+  try {
+    const bytes = await safeRead(store, key);
+    if (bytes === null || bytes.byteLength === 0) return fallback();
+    return parse(bytes);
+  } catch {
+    return fallback();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // IndexedDbStore — production backing (NOT unit-tested headlessly)
 // ---------------------------------------------------------------------------

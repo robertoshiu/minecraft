@@ -7,7 +7,7 @@
  * Default bindings match Minecraft 1.20 keyboard defaults.
  */
 
-import { atomicWrite, safeRead, type SaveStore } from "../save/store";
+import { atomicWrite, loadOrDefault, type SaveStore } from "../save/store";
 
 // ---------------------------------------------------------------------------
 // Action names
@@ -120,13 +120,7 @@ const KEYBINDS_KEY = "keybinds";
  * on absence or parse failure — never throws.
  */
 export async function loadKeybinds(store: SaveStore): Promise<Keybinds> {
-  try {
-    const bytes = await safeRead(store, KEYBINDS_KEY);
-    if (bytes === null || bytes.byteLength === 0) return { ...DEFAULT_KEYBINDS };
-    return parseKeybinds(bytes);
-  } catch {
-    return { ...DEFAULT_KEYBINDS };
-  }
+  return loadOrDefault(store, KEYBINDS_KEY, parseKeybinds, () => ({ ...DEFAULT_KEYBINDS }));
 }
 
 /**

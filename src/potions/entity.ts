@@ -7,6 +7,7 @@
 import type { Vec3 } from "../mobs/entity";
 import type { EffectType } from "../effects/status";
 import { SPLASH } from "../rules/mc-1.20";
+import { launchProjectile } from "../projectile/launch";
 
 /** The effect a splash potion delivers on burst. */
 export interface SplashEffect {
@@ -45,15 +46,5 @@ export function launchSplashFrom(
   aimDir: Vec3,
   speed: number = SPLASH.SPEED,
 ): { origin: Vec3; velocity: Vec3 } {
-  const len = Math.hypot(aimDir.x, aimDir.y, aimDir.z) || 1;
-  const nx = aimDir.x / len;
-  const ny = aimDir.y / len;
-  const nz = aimDir.z / len;
-  const origin: Vec3 = {
-    x: eye.x + nx * SPLASH.SPAWN_OFFSET,
-    y: eye.y + ny * SPLASH.SPAWN_OFFSET,
-    z: eye.z + nz * SPLASH.SPAWN_OFFSET,
-  };
-  const velocity: Vec3 = { x: nx * speed, y: ny * speed, z: nz * speed };
-  return { origin, velocity };
+  return launchProjectile(eye, aimDir, speed, SPLASH.SPAWN_OFFSET);
 }

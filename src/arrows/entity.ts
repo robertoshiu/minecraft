@@ -10,6 +10,7 @@
 import type { Vec3 } from "../mobs/entity";
 import { ARROW } from "../rules/mc-1.20";
 import type { EffectType } from "../effects/status";
+import { launchProjectile } from "../projectile/launch";
 
 export const ARROW_WIDTH = ARROW.WIDTH;
 export const ARROW_LENGTH = ARROW.LENGTH;
@@ -81,15 +82,5 @@ export function launchFrom(
   aimDir: Vec3,
   speed: number,
 ): { origin: Vec3; velocity: Vec3 } {
-  const len = Math.hypot(aimDir.x, aimDir.y, aimDir.z) || 1;
-  const nx = aimDir.x / len;
-  const ny = aimDir.y / len;
-  const nz = aimDir.z / len;
-  const origin: Vec3 = {
-    x: eye.x + nx * ARROW.SPAWN_OFFSET,
-    y: eye.y + ny * ARROW.SPAWN_OFFSET,
-    z: eye.z + nz * ARROW.SPAWN_OFFSET,
-  };
-  const velocity: Vec3 = { x: nx * speed, y: ny * speed, z: nz * speed };
-  return { origin, velocity };
+  return launchProjectile(eye, aimDir, speed, ARROW.SPAWN_OFFSET);
 }

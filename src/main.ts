@@ -745,6 +745,179 @@ function blockHitDistance(
   return Math.hypot(dx, dy, dz);
 }
 
+// ---------------------------------------------------------------------------
+// handleClick helpers — extracted to reduce cognitive complexity.
+// All close over the same module-scope variables as handleClick itself.
+// ---------------------------------------------------------------------------
+
+/**
+ * LMB: a mob in front (and closer than any block hit) is attacked instead of
+ * breaking a block. Right-click never targets mobs.
+ * Returns true ONLY when it actually attacked (mob !== null AND
+ * mobDist <= blockDist). Returns false so the caller falls through to mining.
+ */
+function tryAttackMob(
+  eye: { x: number; y: number; z: number },
+  dir: { x: number; y: number; z: number },
+  hit: import("./interaction/raycast").RaycastHit | null,
+): boolean {
+  const mob = pickMob(eye, dir, REACH, mobDriver.manager.all());
+  if (mob !== null) {
+    const mobDist = Math.hypot(mob.feet.x - eye.x, mob.feet.y - eye.y, mob.feet.z - eye.z);
+    const blockDist = hit === null ? Infinity : blockHitDistance(eye, hit);
+    if (mobDist <= blockDist) {
+      const slot = player.hotbar.selected;
+      const held = player.inventory.get(slot);
+      const heldDef = held === null ? null : getItemDef(held.itemId);
+      attackMob(mob, clock.totalTicks, attackDamageFor(heldDef) + strengthBonus(player.effects), { x: eye.x, z: eye.z });
+      // Play hurt sound at mob position.
+      gameAudio?.onMobHurt(mob.feet);
+      if (held !== null && isTool(held)) {
+        player.inventory.set(slot, damageTool(held));
+      }
+      return true; // this click hit a mob; skip the block break
+    }
+  }
+  return false;
+}
+
+/**
+ * Bow: RMB-down begins charging regardless of where the crosshair points — a
+ * bow aims at distant/empty space, so it must NOT be gated by hit === null.
+ * Release (mouseup) fires the arrow.
+ */
+function tryBeginBowCharge(): boolean {
+  const bowSlot = player.hotbar.selected;
+  const bowHeld = player.inventory.get(bowSlot);
+  if (bowHeld !== null && bowHeld.itemId === Items.BOW) {
+    bowChargeStartMs = performance.now();
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Splash potion: RMB throws it regardless of where the crosshair points (no
+ * hit===null guard above this). This MUST come before the hit===null guard and
+ * BEFORE resolveUse's drink branch — splash potions are thrown, not drunk.
+ * Keeps the deliberate re-computation of splashEye/splashFwd (intentionally NOT
+ * deduped with the outer eye/dir).
+ */
+function tryThrowSplash(): boolean {
+  const splashSlot = player.hotbar.selected;
+  const splashHeld = player.inventory.get(splashSlot);
+  if (splashHeld !== null && splashHeld.count > 0 && isSplashPotion(splashHeld.itemId)) {
+    if (!pointerLocked() || uiBlockingGameplay()) return true;
+    if (!canThrowSplash(splashManager.count())) return true;
+    const fx = potionEffectOf(splashHeld.itemId);
+    if (fx !== null) {
+      const splashEye = player.eyePosition();
+      const splashFwd = camera.getDirection(Vector3.Forward());
+      const { origin: splashOrigin, velocity: splashVelocity } = launchSplashFrom(
+        splashEye,
+        { x: splashFwd.x, y: splashFwd.y, z: splashFwd.z },
+      );
+      splashManager.spawn(splashOrigin, splashVelocity, fx);
+      player.inventory.removeFromSlot(splashSlot, 1);
+    }
+    return true;
+  }
+  return false;
+}
+
+/** Start (or retarget) the mining timer; the fixed tick does the breaking. */
+function beginMining(hit: import("./interaction/raycast").RaycastHit): void {
+  mining.active = true;
+  mining.x = hit.block.x;
+  mining.y = hit.block.y;
+  mining.z = hit.block.z;
+  mining.slot = player.hotbar.selected;
+  mining.elapsed = 0;
+}
+
+/**
+ * RMB on a block: crafting table / brewing stand / bed special cases, then the
+ * held-item resolveUse switch (eat / equip / drink / use-other / none / place).
+ * placeBlock's BLOCK_COUNT guard stays the safe fallback — never weakened.
+ */
+function handleBlockRightClick(hit: import("./interaction/raycast").RaycastHit): void {
+  // RMB on a crafting table → open the workbench (do NOT place a block).
+  const targetBlock = world.getBlock(hit.block.x, hit.block.y, hit.block.z);
+  if (targetBlock === Blocks.CRAFTING_TABLE) {
+    workbenchScreen.open(player.inventory, player.hotbar);
+    releasePointer();
+    return;
+  }
+  // RMB on a brewing stand → open the brewing UI for THAT placed stand (do
+  // NOT place a block). getOrCreate registers a fresh one on first open.
+  if (targetBlock === Blocks.BREWING_STAND) {
+    const stand = brewingStands.getOrCreate(hit.block.x, hit.block.y, hit.block.z);
+    brewingStandScreen.open(stand, player.inventory, player.hotbar);
+    releasePointer();
+    return;
+  }
+  // RMB on a bed → sleep (or show "can only sleep at night" message).
+  if (targetBlock === Blocks.BED) {
+    if (canSleep(clock)) {
+      sleepToDawn(clock);
+      // Update the player's spawn point to one block above the bed.
+      const bedSpawn = { x: hit.block.x + 0.5, y: hit.block.y + 2, z: hit.block.z + 0.5 };
+      spawnPoint = bedSpawn;
+      player.setSpawn(bedSpawn);
+      showToast("Good morning!");
+    } else {
+      showToast("You can only sleep at night.");
+    }
+    return;
+  }
+  // Route the right-click by held-item kind BEFORE falling through to place.
+  const slot = player.hotbar.selected;
+  const held = player.inventory.get(slot);
+  if (held === null || held.count <= 0) return;
+  const def = getItemDef(held.itemId);
+  const action = resolveUse(def, { hungry: player.survival.food < HUNGER.MAX_FOOD });
+  if (action.kind === "eat") {
+    const f = def.food;
+    if (f !== undefined) {
+      eat(player.survival, f.hunger, f.saturation);
+      player.inventory.removeFromSlot(slot, 1);
+    }
+    return;
+  }
+  if (action.kind === "equip") {
+    const armorSlot = Equipment.slotFor(held.itemId);
+    if (armorSlot !== null) {
+      const prev = player.equipment.equip(armorSlot, held);
+      // The held piece is now worn; the bag slot takes whatever it displaced.
+      player.inventory.set(slot, prev);
+    }
+    return;
+  }
+  if (action.kind === "drink") {
+    const fx = def.potionEffect;
+    if (fx !== undefined) {
+      if (isInstant(fx.type)) {
+        applyInstant(player.survival, fx.type, fx.amplifier);
+      } else {
+        applyEffect(player.effects, fx.type, fx.amplifier, fx.durationTicks);
+      }
+      player.inventory.removeFromSlot(slot, 1);
+    }
+    return;
+  }
+  if (action.kind === "use-other" || action.kind === "none") {
+    // Tools / materials have no right-click effect yet; no place audio/particles.
+    return;
+  }
+  // action.kind === "place": fall through to existing block placement.
+  placeBlock(world, hit, renderer, player);
+  const placePos = { x: hit.previous.x + 0.5, y: hit.previous.y + 0.5, z: hit.previous.z + 0.5 };
+  // Play place sound at the placement position.
+  gameAudio?.onPlace(placePos);
+  // Spawn placement-puff particles.
+  gameEffects?.onPlace(placePos);
+}
+
 /** Cast from the eye along the camera forward; break or place on hit. */
 function handleClick(button: number): void {
   if (uiBlockingGameplay()) return;
@@ -762,174 +935,12 @@ function handleClick(button: number): void {
     (bx, by, bz) => world.getBlock(bx, by, bz),
   );
 
-  // LMB: a mob in front (and closer than any block hit) is attacked instead of
-  // breaking a block. Right-click never targets mobs.
-  if (button === 0) {
-    const mob = pickMob(eye, dir, REACH, mobDriver.manager.all());
-    if (mob !== null) {
-      const mobDist = Math.hypot(
-        mob.feet.x - eye.x,
-        mob.feet.y - eye.y,
-        mob.feet.z - eye.z,
-      );
-      const blockDist = hit === null ? Infinity : blockHitDistance(eye, hit);
-      if (mobDist <= blockDist) {
-        const slot = player.hotbar.selected;
-        const held = player.inventory.get(slot);
-        const heldDef = held === null ? null : getItemDef(held.itemId);
-        attackMob(
-          mob,
-          clock.totalTicks,
-          attackDamageFor(heldDef) + strengthBonus(player.effects),
-          { x: eye.x, z: eye.z },
-        );
-        // Play hurt sound at mob position.
-        gameAudio?.onMobHurt(mob.feet);
-        if (held !== null && isTool(held)) {
-          player.inventory.set(slot, damageTool(held));
-        }
-        return; // this click hit a mob; skip the block break
-      }
-    }
-  }
-
-  // Bow: RMB-down begins charging regardless of where the crosshair points — a
-  // bow aims at distant/empty space, so it must NOT be gated by the near-block
-  // (hit === null) guard below. Release (mouseup) fires the arrow.
-  if (button === 2) {
-    const bowSlot = player.hotbar.selected;
-    const bowHeld = player.inventory.get(bowSlot);
-    if (bowHeld !== null && bowHeld.itemId === Items.BOW) {
-      bowChargeStartMs = performance.now();
-      return;
-    }
-  }
-
-  // Splash potion: RMB throws it regardless of where the crosshair points (no
-  // hit===null guard above this). This MUST come before the hit===null guard and
-  // BEFORE resolveUse's drink branch — splash potions are thrown, not drunk.
-  if (button === 2) {
-    const splashSlot = player.hotbar.selected;
-    const splashHeld = player.inventory.get(splashSlot);
-    if (splashHeld !== null && splashHeld.count > 0 && isSplashPotion(splashHeld.itemId)) {
-      if (!pointerLocked() || uiBlockingGameplay()) return;
-      if (!canThrowSplash(splashManager.count())) return;
-      const fx = potionEffectOf(splashHeld.itemId);
-      if (fx !== null) {
-        const splashEye = player.eyePosition();
-        const splashFwd = camera.getDirection(Vector3.Forward());
-        const { origin: splashOrigin, velocity: splashVelocity } = launchSplashFrom(
-          splashEye,
-          { x: splashFwd.x, y: splashFwd.y, z: splashFwd.z },
-        );
-        splashManager.spawn(splashOrigin, splashVelocity, fx);
-        player.inventory.removeFromSlot(splashSlot, 1);
-      }
-      return;
-    }
-  }
-
+  if (button === 0 && tryAttackMob(eye, dir, hit)) return;
+  if (button === 2 && tryBeginBowCharge()) return;
+  if (button === 2 && tryThrowSplash()) return; // MUST stay before the hit===null guard
   if (hit === null) return;
-  if (button === 0) {
-    // Start (or retarget) the mining timer; the fixed tick does the breaking.
-    mining.active = true;
-    mining.x = hit.block.x;
-    mining.y = hit.block.y;
-    mining.z = hit.block.z;
-    mining.slot = player.hotbar.selected;
-    mining.elapsed = 0;
-  } else if (button === 2) {
-    // RMB on a crafting table → open the workbench (do NOT place a block).
-    const targetBlock = world.getBlock(hit.block.x, hit.block.y, hit.block.z);
-    if (targetBlock === Blocks.CRAFTING_TABLE) {
-      workbenchScreen.open(player.inventory, player.hotbar);
-      releasePointer();
-      return;
-    }
-    // RMB on a brewing stand → open the brewing UI for THAT placed stand (do
-    // NOT place a block). The target block coords come from the same raycast
-    // hit used elsewhere in handleClick — bind the registry's stand at those
-    // integer coords (getOrCreate registers a fresh one on first open).
-    if (targetBlock === Blocks.BREWING_STAND) {
-      const stand = brewingStands.getOrCreate(
-        hit.block.x,
-        hit.block.y,
-        hit.block.z,
-      );
-      brewingStandScreen.open(stand, player.inventory, player.hotbar);
-      releasePointer();
-      return;
-    }
-    // RMB on a bed → sleep (or show "can only sleep at night" message).
-    if (targetBlock === Blocks.BED) {
-      if (canSleep(clock)) {
-        sleepToDawn(clock);
-        // Update the player's spawn point to one block above the bed.
-        const bedSpawn = {
-          x: hit.block.x + 0.5,
-          y: hit.block.y + 2,
-          z: hit.block.z + 0.5,
-        };
-        spawnPoint = bedSpawn;
-        player.setSpawn(bedSpawn);
-        showToast("Good morning!");
-      } else {
-        showToast("You can only sleep at night.");
-      }
-      return;
-    }
-    // Route the right-click by held-item kind BEFORE falling through to place.
-    // placeBlock's BLOCK_COUNT guard stays the safe fallback — never weakened.
-    const slot = player.hotbar.selected;
-    const held = player.inventory.get(slot);
-    if (held === null || held.count <= 0) return;
-    const def = getItemDef(held.itemId);
-    const action = resolveUse(def, { hungry: player.survival.food < HUNGER.MAX_FOOD });
-    if (action.kind === "eat") {
-      const f = def.food;
-      if (f !== undefined) {
-        eat(player.survival, f.hunger, f.saturation);
-        player.inventory.removeFromSlot(slot, 1);
-      }
-      return;
-    }
-    if (action.kind === "equip") {
-      const armorSlot = Equipment.slotFor(held.itemId);
-      if (armorSlot !== null) {
-        const prev = player.equipment.equip(armorSlot, held);
-        // The held piece is now worn; the bag slot takes whatever it displaced.
-        player.inventory.set(slot, prev);
-      }
-      return;
-    }
-    if (action.kind === "drink") {
-      const fx = def.potionEffect;
-      if (fx !== undefined) {
-        if (isInstant(fx.type)) {
-          applyInstant(player.survival, fx.type, fx.amplifier);
-        } else {
-          applyEffect(player.effects, fx.type, fx.amplifier, fx.durationTicks);
-        }
-        player.inventory.removeFromSlot(slot, 1);
-      }
-      return;
-    }
-    if (action.kind === "use-other" || action.kind === "none") {
-      // Tools / materials have no right-click effect yet; no place audio/particles.
-      return;
-    }
-    // action.kind === "place": fall through to existing block placement.
-    placeBlock(world, hit, renderer, player);
-    const placePos = {
-      x: hit.previous.x + 0.5,
-      y: hit.previous.y + 0.5,
-      z: hit.previous.z + 0.5,
-    };
-    // Play place sound at the placement position.
-    gameAudio?.onPlace(placePos);
-    // Spawn placement-puff particles.
-    gameEffects?.onPlace(placePos);
-  }
+  if (button === 0) { beginMining(hit); return; }
+  if (button === 2) { handleBlockRightClick(hit); }
 }
 
 canvas.addEventListener("mousedown", (e) => {

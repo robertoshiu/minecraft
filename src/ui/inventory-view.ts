@@ -327,3 +327,30 @@ export function applyShiftClick(
 
   return { moved: true, slots };
 }
+
+/**
+ * The first stack of `itemId` in the inventory, or a synthetic display stack
+ * (count 1) when none is found — so a craft cell always shows something.
+ */
+export function firstStackOf(inventory: Inventory, itemId: number): ItemStack {
+  for (let i = 0; i < Inventory.SLOTS; i++) {
+    const stack = inventory.get(i);
+    if (stack !== null && stack.itemId === itemId) {
+      return { itemId, count: 1, maxStack: stack.maxStack };
+    }
+  }
+  return { itemId, count: 1, maxStack: 64 };
+}
+
+/**
+ * Return a cursor-held stack into the inventory; returns the new cursor value
+ * (leftover that didn't fit, or null). Pure: caller writes the result back.
+ */
+export function returnStackToInventory(
+  cursor: ItemStack | null,
+  inventory: Inventory | null,
+): ItemStack | null {
+  if (cursor === null || inventory === null) return cursor;
+  const leftover = inventory.add(cursor);
+  return leftover > 0 ? { ...cursor, count: leftover } : null;
+}

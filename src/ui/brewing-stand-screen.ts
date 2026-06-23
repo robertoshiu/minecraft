@@ -23,8 +23,9 @@ import {
   slotView,
   applySlotClick,
   applyRightClick,
+  returnStackToInventory,
 } from "./inventory-view";
-import { getAtlasIconStyle } from "./item-icon";
+import { fillSlot } from "./slot-render";
 
 /** Whether the DOM is available (false under node / unit tests). */
 function hasDom(): boolean {
@@ -56,41 +57,6 @@ function styleSlot(el: HTMLElement): void {
   el.style.position = "relative";
 }
 
-/** Render a stack (or null) into a slot element. */
-function fillSlot(el: HTMLElement, stack: ItemStack | null): void {
-  const v = slotView(stack);
-  el.title = v.name;
-  el.setAttribute("aria-label", v.empty ? "Empty slot" : `${v.name}, ${String(v.count)} items`);
-
-  // Clear previous icon state before re-rendering.
-  el.style.backgroundImage = "";
-  el.style.backgroundSize = "";
-  el.style.backgroundPosition = "";
-  el.style.imageRendering = "";
-
-  if (v.empty) {
-    el.textContent = "";
-    return;
-  }
-
-  // Try to show the atlas block icon as a CSS background.
-  const iconStyle = getAtlasIconStyle(stack!.itemId);
-  if (iconStyle !== null) {
-    el.textContent = "";
-    el.style.backgroundImage = iconStyle.backgroundImage;
-    el.style.backgroundSize = iconStyle.backgroundSize;
-    el.style.backgroundPosition = iconStyle.backgroundPosition;
-    el.style.imageRendering = iconStyle.imageRendering;
-
-    const countSpan = document.createElement("span");
-    countSpan.className = "slot-count";
-    countSpan.textContent = String(v.count);
-    el.appendChild(countSpan);
-  } else {
-    // Fallback: text label (non-block items, headless env, canvas unavailable).
-    el.textContent = `${v.label} ${String(v.count)}`;
-  }
-}
 
 /**
  * The Brewing Stand screen. Construct once; call {@link open}/{@link close} to
@@ -168,9 +134,7 @@ export class BrewingStandScreen {
   // --- Private helpers -------------------------------------------------------
 
   private returnCursorToInventory(): void {
-    if (this.cursor === null || this.inventory === null) return;
-    const leftover = this.inventory.add(this.cursor);
-    this.cursor = leftover > 0 ? { ...this.cursor, count: leftover } : null;
+    this.cursor = returnStackToInventory(this.cursor, this.inventory);
   }
 
   /** Read the bound stand's slot. */

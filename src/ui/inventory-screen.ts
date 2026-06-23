@@ -21,8 +21,11 @@ import {
   beginDrag,
   applyDragMove,
   cancelDrag,
+  firstStackOf,
+  returnStackToInventory,
   type DragState,
 } from "./inventory-view";
+import { fillSlot } from "./slot-render";
 import {
   HandCraftModel,
   HAND_GRID_CELLS,
@@ -59,45 +62,6 @@ function styleSlot(el: HTMLElement): void {
   el.style.transition = "transform 80ms ease-out, border-color 80ms ease-out, box-shadow 80ms ease-out";
 }
 
-/** Render a stack (or null) into a slot element via the pure view-model. */
-function fillSlot(el: HTMLElement, stack: ItemStack | null): void {
-  const v = slotView(stack);
-  el.title = v.name;
-  el.setAttribute(
-    "aria-label",
-    v.empty ? "Empty slot" : `${v.name}, ${v.count} items`,
-  );
-
-  // Clear previous icon state before re-rendering.
-  el.style.backgroundImage = "";
-  el.style.backgroundSize = "";
-  el.style.backgroundPosition = "";
-  el.style.imageRendering = "";
-
-  if (v.empty) {
-    el.textContent = "";
-    return;
-  }
-
-  // Try to show the atlas block icon as a CSS background.
-  const iconStyle = getAtlasIconStyle(stack!.itemId);
-  if (iconStyle !== null) {
-    el.textContent = ""; // clear text; count goes in a child span
-    el.style.backgroundImage = iconStyle.backgroundImage;
-    el.style.backgroundSize = iconStyle.backgroundSize;
-    el.style.backgroundPosition = iconStyle.backgroundPosition;
-    el.style.imageRendering = iconStyle.imageRendering;
-    el.style.position = "relative";
-
-    const countSpan = document.createElement("span");
-    countSpan.className = "slot-count";
-    countSpan.textContent = String(v.count);
-    el.appendChild(countSpan);
-  } else {
-    // Fallback: text label (non-block items, headless env, canvas unavailable).
-    el.textContent = `${v.label} ${String(v.count)}`;
-  }
-}
 
 /**
  * The inventory + hand-craft screen. Construct once; call {@link render} when
@@ -647,9 +611,7 @@ export class InventoryScreen {
 
   /** Return any cursor-held stack into the inventory (used when closing). */
   private returnCursorToInventory(): void {
-    if (this.cursor === null || this.inventory === null) return;
-    const leftover = this.inventory.add(this.cursor);
-    this.cursor = leftover > 0 ? { ...this.cursor, count: leftover } : null;
+    this.cursor = returnStackToInventory(this.cursor, this.inventory);
   }
 
   /**
@@ -676,17 +638,3 @@ export class InventoryScreen {
   }
 }
 
-/**
- * The first stack of `itemId` in the inventory, or a synthetic display stack
- * (count 1) when none is found — so a craft cell always shows something while
- * populated.
- */
-function firstStackOf(inventory: Inventory, itemId: number): ItemStack {
-  for (let i = 0; i < Inventory.SLOTS; i++) {
-    const stack = inventory.get(i);
-    if (stack !== null && stack.itemId === itemId) {
-      return { itemId, count: 1, maxStack: stack.maxStack };
-    }
-  }
-  return { itemId, count: 1, maxStack: 64 };
-}

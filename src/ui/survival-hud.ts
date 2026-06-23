@@ -14,29 +14,12 @@
 import type { SurvivalState } from "../survival/stats";
 import type { Clock } from "../time/clock";
 import { dayNumber, phase } from "../time/clock";
+import { pipFills, type Fill } from "./pips";
 
 /** Number of heart / shank pips (each represents 2 points). */
 const PIPS = 10;
 /** Points represented by a single pip (2 HP per heart, 2 food per shank). */
 const POINTS_PER_PIP = 2;
-
-/** Fill state of a single pip. */
-type Fill = "full" | "half" | "empty";
-
-/**
- * Decompose a 0..20 stat into 10 pip fill states. Each pip covers 2 points:
- * >= its full threshold → full, >= half → half, else empty.
- */
-function pipFills(value: number): Fill[] {
-  const fills: Fill[] = [];
-  for (let i = 0; i < PIPS; i++) {
-    const base = i * POINTS_PER_PIP;
-    if (value >= base + POINTS_PER_PIP) fills.push("full");
-    else if (value >= base + 1) fills.push("half");
-    else fills.push("empty");
-  }
-  return fills;
-}
 
 /** Apply a fill state to a pip element by toggling the `half`/`empty` classes. */
 function applyPip(el: HTMLElement, fill: Fill): void {
@@ -70,7 +53,7 @@ export function updateSurvivalHud(survival: SurvivalState, clock: Clock): void {
   const healthBar = document.getElementById("health-bar");
   if (healthBar !== null) {
     const hearts = healthBar.querySelectorAll<HTMLElement>(".heart");
-    const fills = pipFills(survival.health);
+    const fills = pipFills(survival.health, PIPS, POINTS_PER_PIP);
     fills.forEach((fill, i) => {
       const el = hearts[i];
       if (el !== undefined) applyPip(el, fill);
@@ -80,7 +63,7 @@ export function updateSurvivalHud(survival: SurvivalState, clock: Clock): void {
   const hungerBar = document.getElementById("hunger-bar");
   if (hungerBar !== null) {
     const shanks = hungerBar.querySelectorAll<HTMLElement>(".shank");
-    const fills = pipFills(survival.food);
+    const fills = pipFills(survival.food, PIPS, POINTS_PER_PIP);
     fills.forEach((fill, i) => {
       const el = shanks[i];
       if (el !== undefined) applyPip(el, fill);

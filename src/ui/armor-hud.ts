@@ -9,11 +9,12 @@
 import type { Equipment } from "../inventory/equipment";
 import type { EffectState, EffectType } from "../effects/status";
 import { TICKS_PER_SECOND } from "../rules/mc-1.20";
+import { pipFills, type Fill } from "./pips";
+
+export type { Fill };
 
 const PIPS = 10;
 const POINTS_PER_PIP = 2;
-
-export type Fill = "full" | "half" | "empty";
 
 const EFFECT_ABBREV: Record<EffectType, string> = {
   regeneration: "REGEN",
@@ -28,14 +29,7 @@ const EFFECT_ABBREV: Record<EffectType, string> = {
 
 /** Decompose a 0..20 defense value into 10 pip fill states (each pip = 2 pts). */
 export function armorPips(defense: number): Fill[] {
-  const fills: Fill[] = [];
-  for (let i = 0; i < PIPS; i++) {
-    const base = i * POINTS_PER_PIP;
-    if (defense >= base + POINTS_PER_PIP) fills.push("full");
-    else if (defense >= base + 1) fills.push("half");
-    else fills.push("empty");
-  }
-  return fills;
+  return pipFills(defense, PIPS, POINTS_PER_PIP);
 }
 
 export interface EffectBadge {

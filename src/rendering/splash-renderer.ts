@@ -19,6 +19,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import type { SplashPotion } from "../potions/entity";
 import type { ShadowCasterSink } from "./world-renderer";
+import { disposeRecordRoots } from "./renderer-utils";
 
 interface SplashRecord {
   root: TransformNode;
@@ -80,11 +81,7 @@ export class SplashPotionRenderer {
 
   /** Tear down all records + the shared material. */
   dispose(): void {
-    for (const [, record] of this.records) {
-      this.shadowSink?.removeShadowCaster(record.mesh);
-      record.root.dispose(false, false); // free meshes; shared material disposed once below
-    }
-    this.records.clear();
+    disposeRecordRoots(this.records, this.shadowSink);
     this.material?.dispose();
     this.material = null;
   }

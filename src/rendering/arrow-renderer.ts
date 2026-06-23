@@ -19,6 +19,7 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import type { Arrow } from "../arrows/entity";
 import { ARROW } from "../rules/mc-1.20";
 import type { ShadowCasterSink } from "./world-renderer";
+import { disposeRecordRoots } from "./renderer-utils";
 
 interface ArrowRecord {
   root: TransformNode;
@@ -86,11 +87,7 @@ export class ArrowRenderer {
 
   /** Tear down all records + the shared material. */
   dispose(): void {
-    for (const [, record] of this.records) {
-      this.shadowSink?.removeShadowCaster(record.mesh);
-      record.root.dispose(false, false); // free meshes; shared material disposed once below
-    }
-    this.records.clear();
+    disposeRecordRoots(this.records, this.shadowSink);
     this.material?.dispose();
     this.material = null;
   }

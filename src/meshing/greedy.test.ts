@@ -152,7 +152,7 @@ describe("meshChunk — greedy mesher", () => {
     expect(found).toBe(true);
   });
 
-  it("triangles are wound CCW so the +Y face points outward", () => {
+  it("triangles wind Babylon left-handed front-facing so the +Y face points outward", () => {
     const c = new Chunk();
     c.set(8, 8, 8, Blocks.STONE);
     const mesh = meshChunk(c);
@@ -168,11 +168,13 @@ describe("meshChunk — greedy mesher", () => {
       const cx = p[cc * 3] ?? 0, cy = p[cc * 3 + 1] ?? 0, cz = p[cc * 3 + 2] ?? 0;
       // Triangle on the top plane (all y == 9).
       if (ay === 9 && by === 9 && cy === 9) {
-        // Cross product of edges; geometric normal should point +Y for CCW.
+        // Cross product of edges; geometric (RH) normal must point -Y here —
+        // Babylon LH front-face fix (2026-07-02): a front face has its RH
+        // cross OPPOSED to the declared +Y outward normal, not aligned.
         const e1 = [bx - ax, by - ay, bz - az] as const;
         const e2 = [cx - ax, cy - ay, cz - az] as const;
         const ny = e1[2] * e2[0] - e1[0] * e2[2]; // y-component of cross(e1,e2)
-        expect(ny).toBeGreaterThan(0);
+        expect(ny).toBeLessThan(0);
         checked = true;
       }
     }
@@ -278,5 +280,68 @@ describe("meshChunk — greedy mesher", () => {
     const mesh = meshChunk(c);
     expect(mesh.opaque.faceShades.length).toBe(0);
     expect(mesh.transparent.faceShades.length).toBe(0);
+  });
+});
+
+// ── Babylon left-handed front-face winding fix ──────────────────────────────
+//
+// Babylon.js scenes default to a LEFT-handed coordinate system, and the
+// opaque terrain material has backFaceCulling=true. In a left-handed engine,
+// a triangle is a FRONT face (the one that survives culling and gets
+// rendered) when the right-hand-rule cross product of its edges points
+// AGAINST the declared outward normal — i.e. dot(crossRH(e1, e2), normal) < 0.
+// This is the opposite of the usual right-handed-engine convention (where a
+// front face has the RH cross ALIGNED with the normal).
+//
+// Empirically confirmed live in Babylon.js 8 / WebGL2 on 2026-07-02: every
+// upward (+Y) terrain face was invisible from above (backface-culled) with
+// the mesher's original (0,1,2)+(0,2,3) triangulation, and disabling
+// backFaceCulling made the whole terrain surface render correctly — proving
+// the emitted winding was inverted relative to Babylon's front-face
+// convention. Numerically, the original triangulation's RH cross pointed
+// ALONG the declared outward normal for every face (dot > 0), which is a
+// back face under Babylon's left-handed rule.
+describe("meshChunk — Babylon left-handed front-face winding (regression, 2026-07-02)", () => {
+  it("every quad's two triangles, for all 6 face directions, wind Babylon-left-handed front-facing", () => {
+    // A single solid block with air on all sides emits exactly one quad per
+    // face direction (6 quads, 12 triangles total) — no greedy merging with
+    // neighbors to complicate which quad belongs to which direction.
+    const c = new Chunk();
+    c.set(8, 8, 8, Blocks.STONE);
+    const mesh = meshChunk(c);
+    const p = mesh.opaque.positions;
+    const n = mesh.opaque.normals;
+    const idx = mesh.opaque.indices;
+
+    expect(idx.length).toBe(6 * 2 * 3); // 6 directions * 2 tris * 3 indices per quad
+
+    let triCount = 0;
+    for (let t = 0; t < idx.length; t += 3) {
+      const ia = idx[t] ?? 0;
+      const ib = idx[t + 1] ?? 0;
+      const ic = idx[t + 2] ?? 0;
+
+      const ax = p[ia * 3] ?? 0, ay = p[ia * 3 + 1] ?? 0, az = p[ia * 3 + 2] ?? 0;
+      const bx = p[ib * 3] ?? 0, by = p[ib * 3 + 1] ?? 0, bz = p[ib * 3 + 2] ?? 0;
+      const cx = p[ic * 3] ?? 0, cy = p[ic * 3 + 1] ?? 0, cz = p[ic * 3 + 2] ?? 0;
+
+      // Declared outward normal for this quad — constant across all 4 verts,
+      // so reading it off vertex `a` is exact regardless of which triangle.
+      const nx = n[ia * 3] ?? 0, ny = n[ia * 3 + 1] ?? 0, nz = n[ia * 3 + 2] ?? 0;
+
+      const e1 = [bx - ax, by - ay, bz - az] as const;
+      const e2 = [cx - ax, cy - ay, cz - az] as const;
+      // Right-hand-rule cross product of the triangle's two edges.
+      const crossX = e1[1] * e2[2] - e1[2] * e2[1];
+      const crossY = e1[2] * e2[0] - e1[0] * e2[2];
+      const crossZ = e1[0] * e2[1] - e1[1] * e2[0];
+      const dot = crossX * nx + crossY * ny + crossZ * nz;
+
+      // Babylon LH + backFaceCulling culls triangles whose RH-cross aligns
+      // with the outward normal; a rendered front face must oppose it.
+      expect(dot).toBeLessThan(0);
+      triCount++;
+    }
+    expect(triCount).toBe(12); // 6 directions * 2 triangles each
   });
 });

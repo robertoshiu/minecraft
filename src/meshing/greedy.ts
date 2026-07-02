@@ -113,7 +113,9 @@ class MeshBuilder {
    * each paired with its merged-quad uv (0..width, 0..height) so the atlas
    * shader tiles via `fract()`. `normal` is the outward unit normal; `tile` the
    * atlas tile index; `shade` is the baked per-face directional brightness.
-   * Triangulated (0,1,2)+(0,2,3), preserving the CCW winding.
+   * Triangulated (0,2,1)+(0,3,2) so the RH cross of each triangle points
+   * OPPOSITE the outward normal — Babylon left-handed front-face
+   * (backFaceCulling=true renders these as front faces).
    */
   addQuad(
     verts: readonly {
@@ -134,7 +136,7 @@ class MeshBuilder {
       this.tileIndices.push(tile);
       this.faceShades.push(shade);
     }
-    this.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    this.indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
     this.vertexCount += 4;
   }
 

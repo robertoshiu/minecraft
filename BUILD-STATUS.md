@@ -3,6 +3,14 @@
 Current build state as of 2026-06-15. Cross-referenced against the plan at
 `.omo/plans/minecraft-clone.md` (7 waves + Final) and the actual `src/` tree.
 
+> **2026-07-02 correction:** every earlier "world renders / geometry verified" claim below
+> was made while ALL greedy-mesher quads were wound backwards for Babylon's left-handed
+> front-face convention — upward faces were backface-culled, so the deployed game showed a
+> sheet/eviscerated world (misdiagnosed as fog on 2026-06-23). Fixed by flipping the
+> `addQuad` triangulation (`src/meshing/greedy.ts`) + a six-direction winding regression
+> test. Same session: first-click pointer-lock acquisition on mousedown, mining progress
+> bar under the crosshair, raycast-miss crosshair pulse, hold-to-mine first-time hint.
+
 ---
 
 ## Test Coverage

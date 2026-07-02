@@ -38,6 +38,7 @@ import { resolveUse } from "./interaction/use-item";
 import { breakTicks } from "./interaction/mining";
 import { getItemDef, Items, isSplashPotion, arrowEffectOf, potionEffectOf } from "./rules/items";
 import { updateHotbarHud } from "./ui/hotbar-hud";
+import { setMiningProgress, miningFraction } from "./ui/mining-hud";
 import { updateSurvivalHud } from "./ui/survival-hud";
 import { updateArmorHud } from "./ui/armor-hud";
 import { isTool, damageTool } from "./inventory/stack";
@@ -360,6 +361,7 @@ const mining: MiningState = { active: false, x: 0, y: 0, z: 0, slot: -1, elapsed
 function resetMining(): void {
   mining.active = false;
   mining.elapsed = 0;
+  setMiningProgress(null);
 }
 
 // Starter inventory: real tools + blocks + food, from the single factory.
@@ -734,6 +736,13 @@ function pointerLocked(): boolean {
   return document.pointerLockElement === canvas;
 }
 
+// Fire the one-time "hold to mine" hint the first time pointer lock lands
+// (fires on every (re-)acquisition; HintManager's shown-guard makes repeats
+// a no-op, so it only ever displays once per world).
+document.addEventListener("pointerlockchange", () => {
+  if (pointerLocked()) hintManager?.onPointerLockAcquired();
+});
+
 /** Distance from the eye to the entry corner of a hit voxel (for mob-vs-block). */
 function blockHitDistance(
   eye: { x: number; y: number; z: number },
@@ -918,10 +927,40 @@ function handleBlockRightClick(hit: import("./interaction/raycast").RaycastHit):
   gameEffects?.onPlace(placePos);
 }
 
+/**
+ * Flash the crosshair briefly (miss feedback) when a locked left-click's
+ * raycast finds nothing within reach. Removed on animationend, with a
+ * timeout fallback in case the animation event never fires.
+ */
+let crosshairMissTimer: ReturnType<typeof setTimeout> | undefined;
+function flashCrosshairMiss(): void {
+  if (typeof document === "undefined") return;
+  const el = document.getElementById("crosshair");
+  if (el === null) return;
+  el.classList.remove("miss");
+  void el.offsetWidth; // force reflow so re-adding "miss" restarts the animation
+  el.classList.add("miss");
+  const onEnd = (): void => {
+    el.classList.remove("miss");
+    el.removeEventListener("animationend", onEnd);
+  };
+  el.addEventListener("animationend", onEnd);
+  if (crosshairMissTimer !== undefined) clearTimeout(crosshairMissTimer);
+  crosshairMissTimer = setTimeout(() => {
+    el.classList.remove("miss");
+  }, 200);
+}
+
 /** Cast from the eye along the camera forward; break or place on hit. */
 function handleClick(button: number): void {
   if (uiBlockingGameplay()) return;
   if (!pointerLocked()) {
+    // The gesture that unlocks the pointer must NOT also attempt to mine —
+    // the lock lands asynchronously, so this event stops here regardless of
+    // where the crosshair points. The next click, once locked, mines/places.
+    // (Re-guard against null: `canvas`'s module-scope `instanceof` narrowing
+    // doesn't extend into this hoisted function declaration's type-checking.)
+    if (canvas !== null) void canvas.requestPointerLock();
     showToast("Click to lock the mouse — then Left-click to mine, Right-click to place. 1-9 selects the hotbar.");
     return;
   }
@@ -938,7 +977,10 @@ function handleClick(button: number): void {
   if (button === 0 && tryAttackMob(eye, dir, hit)) return;
   if (button === 2 && tryBeginBowCharge()) return;
   if (button === 2 && tryThrowSplash()) return; // MUST stay before the hit===null guard
-  if (hit === null) return;
+  if (hit === null) {
+    if (button === 0) flashCrosshairMiss();
+    return;
+  }
   if (button === 0) { beginMining(hit); return; }
   if (button === 2) { handleBlockRightClick(hit); }
 }
@@ -1106,6 +1148,7 @@ engine.runRenderLoop(() => {
         const heldDef = held === null ? null : getItemDef(held.itemId);
         const need = breakTicks(id, heldDef);
         mining.elapsed += 1;
+        setMiningProgress(miningFraction(mining.elapsed, need));
         if (mining.elapsed >= need) {
           const brokenId = id;
           breakBlock(world, hitNow, renderer, player.inventory);

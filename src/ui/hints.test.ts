@@ -340,4 +340,70 @@ describe("HintManager", () => {
       mgr.dispose();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // onPointerLockAcquired()
+  // -------------------------------------------------------------------------
+
+  describe("onPointerLockAcquired()", () => {
+    it("enqueues the 'mine-hold' hint and shows it exactly once", async () => {
+      const mgr = new HintManager(store);
+      await mgr.load();
+
+      mgr.onPointerLockAcquired();
+      await flushMicrotasks();
+
+      // "mine-hold" should be marked shown immediately (show() persists before display).
+      const shown = await readShownHints(store);
+      expect(shown).toContain("mine-hold");
+
+      mgr.dispose();
+    });
+
+    it("calling onPointerLockAcquired() twice does NOT re-queue 'mine-hold'", async () => {
+      const mgr = new HintManager(store);
+      await mgr.load();
+
+      mgr.onPointerLockAcquired();
+      // Advance through full display cycle.
+      await tickMs(300 + 5000 + 500 + 50);
+
+      const shown1 = await readShownHints(store);
+      expect(shown1.filter((x) => x === "mine-hold")).toHaveLength(1);
+
+      // Second call (e.g. re-locking the pointer later in the same session)
+      // — should be a no-op.
+      mgr.onPointerLockAcquired();
+      await tickMs(300 + 5000 + 500 + 50);
+
+      const shown2 = await readShownHints(store);
+      expect(shown2.filter((x) => x === "mine-hold")).toHaveLength(1);
+
+      mgr.dispose();
+    });
+
+    it("'mine-hold' hint is not shown if already shown in a prior session", async () => {
+      // Pre-populate: prior session shows "mine-hold".
+      const priorMgr = new HintManager(store);
+      await priorMgr.load();
+      priorMgr.onPointerLockAcquired();
+      await tickMs(50);
+      priorMgr.dispose();
+
+      // New session, same store.
+      vi.useRealTimers();
+      vi.useFakeTimers();
+
+      const mgr = new HintManager(store);
+      await mgr.load();
+      mgr.onPointerLockAcquired();
+      await tickMs(300 + 5000 + 500 + 50);
+
+      const shown = await readShownHints(store);
+      // Still exactly one occurrence.
+      expect(shown.filter((x) => x === "mine-hold")).toHaveLength(1);
+
+      mgr.dispose();
+    });
+  });
 });

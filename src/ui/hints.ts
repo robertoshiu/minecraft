@@ -34,6 +34,7 @@ export interface HintDef {
 export const HINTS: readonly HintDef[] = [
   { id: "move",      message: "WASD to move · Space to jump" },
   { id: "break",     message: "Left-click to break blocks" },
+  { id: "mine-hold", message: "按住左鍵挖掘方塊 / Hold left mouse button to mine" },
   { id: "place",     message: "Right-click to place blocks" },
   { id: "inventory", message: "Press E to open inventory" },
   { id: "help",      message: "Press H for full controls" },
@@ -179,6 +180,17 @@ export class HintManager {
    */
   onNightfall(): void {
     this.enqueue("darkness");
+  }
+
+  /**
+   * Call when pointer lock is (re-)acquired. Queues the "mine-hold" hint,
+   * which explains that mining is hold-to-break, not tap-to-break. Safe to
+   * call on every lock acquisition in a session — enqueue()'s shown-guard
+   * ensures it only ever displays once per world (same persistence pattern
+   * as every other hint).
+   */
+  onPointerLockAcquired(): void {
+    this.enqueue("mine-hold");
   }
 
   /**
